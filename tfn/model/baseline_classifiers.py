@@ -68,8 +68,8 @@ class TransformerClassifier(nn.Module):
         h = self.embed(x) + self.pos(x.size(1))
         h = self.transformer(h)
         
-        # Global average pooling
-        pooled = h.mean(dim=1)  # [B, embed_dim]
+        # Use first token ([CLS] position) for classification
+        pooled = h[:, 0, :]  # [B, embed_dim]
         
         # Classification
         logits = self.classifier(pooled)  # [B, num_classes]
@@ -157,8 +157,8 @@ class PerformerClassifier(nn.Module):
             h = layer(h)
             h = h + residual
         
-        # Global average pooling
-        pooled = h.mean(dim=1)  # [B, embed_dim]
+        # Use first token ([CLS] position) for classification
+        pooled = h[:, 0, :]  # [B, embed_dim]
         
         # Classification
         logits = self.classifier(pooled)  # [B, num_classes]

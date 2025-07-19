@@ -68,8 +68,8 @@ class TransformerRegressor(nn.Module):
         h = self.input_proj(x) + self.pos(x.size(1))
         h = self.transformer(h)
         
-        # Global average pooling
-        pooled = h.mean(dim=1)  # [B, embed_dim]
+        # Use first token ([CLS] position) for regression
+        pooled = h[:, 0, :]  # [B, embed_dim]
         
         # Regression
         output = self.regressor(pooled)  # [B, output_dim]
@@ -157,8 +157,8 @@ class PerformerRegressor(nn.Module):
             h = layer(h)
             h = h + residual
         
-        # Global average pooling
-        pooled = h.mean(dim=1)  # [B, embed_dim]
+        # Use first token ([CLS] position) for regression
+        pooled = h[:, 0, :]  # [B, embed_dim]
         
         # Regression
         output = self.regressor(pooled)  # [B, output_dim]
