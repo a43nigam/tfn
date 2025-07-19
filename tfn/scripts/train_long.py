@@ -38,7 +38,7 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader, TensorDataset
 
-from tfn.datasets import dataset_loaders as dl
+from tfn.tfn_datasets import dataset_loaders as dl
 from tfn.model import TFNClassifier
 from tfn.model.tfn_2d import TFNClassifier2D, create_tfn2d_variants
 
@@ -69,7 +69,9 @@ class WarmCosineLR(optim.lr_scheduler._LRScheduler):
 # Helper – create model dict similar to the old ``create_tfn_variants``
 # -----------------------------------------------------------------------------
 
-def create_tfn_variants(vocab_size: int, num_classes: int, embed_dim: int = 128) -> Dict[str, nn.Module]:
+def create_tfn_variants(vocab_size: int, num_classes: int, embed_dim: int = 128, 
+                       kernel_type: str = "rbf", evolution_type: str = "cnn",
+                       grid_size: int = 100, time_steps: int = 3) -> Dict[str, nn.Module]:
     """Return a minimal set of 1-D TFN variants for convenience."""
     return {
         "tfn_basic": TFNClassifier(
@@ -77,16 +79,20 @@ def create_tfn_variants(vocab_size: int, num_classes: int, embed_dim: int = 128)
             embed_dim=embed_dim,
             num_classes=num_classes,
             num_layers=2,
-            grid_size=100,
-            time_steps=3,
+            kernel_type=kernel_type,
+            evolution_type=evolution_type,
+            grid_size=grid_size,
+            time_steps=time_steps,
         ),
         "tfn_deep": TFNClassifier(
             vocab_size=vocab_size,
             embed_dim=embed_dim,
             num_classes=num_classes,
             num_layers=4,
-            grid_size=128,
-            time_steps=5,
+            kernel_type=kernel_type,
+            evolution_type=evolution_type,
+            grid_size=grid_size,
+            time_steps=time_steps,
         ),
     }
 
@@ -149,6 +155,18 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--variant", type=str, default="tfn_basic", help="Variant key for 1-D or 2-D model dict")
     p.add_argument("--embed_dim", type=int, default=128)
     p.add_argument("--num_layers", type=int, default=2)
+    
+    # Add missing TFN parameters for full configurability
+    p.add_argument("--kernel_type", type=str, default="rbf",
+                   choices=["rbf", "compact", "fourier"],
+                   help="Kernel type for field projection")
+    p.add_argument("--evolution_type", type=str, default="cnn",
+                   choices=["cnn", "spectral", "pde"],
+                   help="Evolution type for field dynamics")
+    p.add_argument("--grid_size", type=int, default=100,
+                   help="Grid size for field evaluation (1D)")
+    p.add_argument("--time_steps", type=int, default=3,
+                   help="Number of evolution time steps")
 
     # 2-D specific
     p.add_argument("--grid_height", type=int, default=32)
@@ -182,7 +200,9 @@ def main() -> None:
 
     # ------------------- Model ------------------ #
     if args.model == "tfn1d":
-        variants = create_tfn_variants(vocab_size, num_classes, embed_dim=args.embed_dim)
+        variants = create_tfn_variants(vocab_size, num_classes, embed_dim=args.embed_dim,
+                                     kernel_type=args.kernel_type, evolution_type=args.evolution_type,
+                                     grid_size=args.grid_size, time_steps=args.time_steps)
     else:
         variants = create_tfn2d_variants(
             vocab_size=vocab_size,

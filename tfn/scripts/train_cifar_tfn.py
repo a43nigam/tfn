@@ -78,6 +78,19 @@ def parse_args():
     p.add_argument("--kernel_mix", action="store_true")
     p.add_argument("--kernel_mix_scale", type=float, default=2.0)
     p.add_argument("--out_sigma_scale", type=float, default=2.0)
+    # Add missing TFN parameters for full configurability
+    p.add_argument("--kernel_type", type=str, default="rbf",
+                   choices=["rbf", "compact", "fourier"],
+                   help="Kernel type for field projection")
+    p.add_argument("--evolution_type", type=str, default="cnn",
+                   choices=["cnn", "spectral", "pde"],
+                   help="Evolution type for field dynamics")
+    p.add_argument("--grid_size", type=int, default=64,
+                   help="Grid size for field evaluation")
+    p.add_argument("--time_steps", type=int, default=3,
+                   help="Number of evolution time steps")
+    p.add_argument("--dropout", type=float, default=0.1,
+                   help="Dropout rate")
     out_grp = p.add_mutually_exclusive_group()
     out_grp.add_argument("--learnable_out_sigma", dest="learnable_out_sigma", action="store_true")
     out_grp.add_argument("--no_learnable_out_sigma", dest="learnable_out_sigma", action="store_false")

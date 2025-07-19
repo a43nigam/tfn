@@ -79,7 +79,16 @@ def train(args: argparse.Namespace) -> None:
 
     # ---------------- Model selection ---------------- #
     if args.model == "tfn":
-        model = TFNSeqModel(vocab_size=vocab_size, seq_len=args.seq_len, embed_dim=args.embed_dim)
+        model = TFNSeqModel(
+            vocab_size=vocab_size, 
+            seq_len=args.seq_len, 
+            embed_dim=args.embed_dim,
+            grid_size=args.grid_size,
+            kernel_type=args.kernel_type,
+            evolution_type=args.evolution_type,
+            time_steps=args.time_steps,
+            dropout=args.dropout
+        )
     elif args.model == "transformer":
         model = SimpleTransformerSeqModel(
             vocab_size=vocab_size,
@@ -176,6 +185,19 @@ if __name__ == "__main__":
     parser.add_argument("--num_layers", type=int, default=2)
     parser.add_argument("--num_heads", type=int, default=4)
     parser.add_argument("--proj_dim", type=int, default=64, help="Projection dim for Performer")
+    # Add missing TFN parameters for full configurability
+    parser.add_argument("--kernel_type", type=str, default="rbf",
+                       choices=["rbf", "compact", "fourier"],
+                       help="Kernel type for field projection (TFN only)")
+    parser.add_argument("--evolution_type", type=str, default="cnn",
+                       choices=["cnn", "spectral", "pde"],
+                       help="Evolution type for field dynamics (TFN only)")
+    parser.add_argument("--grid_size", type=int, default=256,
+                       help="Grid size for field evaluation (TFN only)")
+    parser.add_argument("--time_steps", type=int, default=3,
+                       help="Number of evolution time steps (TFN only)")
+    parser.add_argument("--dropout", type=float, default=0.1,
+                       help="Dropout rate (TFN only)")
     parser.add_argument("--lr", type=float, default=1e-3)
     parser.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu")
     parser.add_argument("--seed", type=int, default=42)

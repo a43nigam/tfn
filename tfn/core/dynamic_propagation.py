@@ -68,8 +68,12 @@ class DynamicFieldPropagator(nn.Module):
             self.diffusion_coeff = nn.Parameter(torch.tensor(0.1))
         elif evolution_type == "wave":
             self.wave_speed = nn.Parameter(torch.tensor(1.0))
+            # Initialize velocity field for second-order wave equation
+            self.velocity_field = nn.Parameter(torch.zeros(embed_dim))
         elif evolution_type == "schrodinger":
-            self.hamiltonian = nn.Parameter(torch.eye(embed_dim))
+            # Complex Hamiltonian for Schrödinger equation
+            self.hamiltonian_real = nn.Parameter(torch.eye(embed_dim))
+            self.hamiltonian_imag = nn.Parameter(torch.zeros(embed_dim, embed_dim))
         
         # Field interference module
         self.interference = TokenFieldInterference(
@@ -105,10 +109,17 @@ class DynamicFieldPropagator(nn.Module):
         # Initialize evolved fields
         evolved_fields = token_fields.clone()
         
+        # Initialize velocity field for wave equation
+        if self.evolution_type == "wave":
+            velocities = torch.zeros_like(evolved_fields)
+        
         # Multi-step evolution
         for step in range(self.num_steps):
             # Compute linear evolution term: L(F)
-            linear_evolution = self._compute_linear_evolution(evolved_fields, positions)
+            if self.evolution_type == "wave":
+                linear_evolution, velocities = self._compute_linear_evolution(evolved_fields, velocities)
+            else:
+                linear_evolution, _ = self._compute_linear_evolution(evolved_fields, positions)
             
             # Compute interference term: Σᵢⱼ βᵢⱼ I(Fᵢ, Fⱼ)
             interference_term = self._compute_interference_term(evolved_fields, positions)
@@ -127,23 +138,30 @@ class DynamicFieldPropagator(nn.Module):
     
     def _compute_linear_evolution(self, 
                                  fields: torch.Tensor,  # [B, N, D]
-                                 positions: Optional[torch.Tensor] = None) -> torch.Tensor:  # [B, N, D]
+                                 positions: Optional[torch.Tensor] = None,
+                                 velocities: Optional[torch.Tensor] = None) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
         """
         Compute linear evolution term L(F).
         
         Args:
             fields: Current field values [B, N, D]
             positions: Token positions [B, N, P] (optional)
+            velocities: Velocity field for wave equation [B, N, D] (optional)
             
         Returns:
-            Linear evolution term [B, N, D]
+            Tuple of (linear evolution term [B, N, D], updated velocities [B, N, D] or None)
         """
         if self.evolution_type == "diffusion":
-            return self._diffusion_evolution(fields)
+            evolution = self._diffusion_evolution(fields)
+            return evolution, None
         elif self.evolution_type == "wave":
-            return self._wave_evolution(fields)
+            if velocities is None:
+                velocities = torch.zeros_like(fields)
+            evolution, new_velocities = self._wave_evolution(fields, velocities)
+            return evolution, new_velocities
         elif self.evolution_type == "schrodinger":
-            return self._schrodinger_evolution(fields)
+            evolution = self._schrodinger_evolution(fields)
+            return evolution, None
         else:
             raise ValueError(f"Unknown evolution type: {self.evolution_type}")
     
@@ -168,8 +186,8 @@ class DynamicFieldPropagator(nn.Module):
         
         return alpha * laplacian
     
-    def _wave_evolution(self, fields: torch.Tensor) -> torch.Tensor:
-        """Compute wave evolution: ∂²F/∂t² = c²∇²F"""
+    def _wave_evolution(self, fields: torch.Tensor, velocities: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+        """Compute proper wave evolution: ∂²F/∂t² = c²∇²F"""
         batch_size, num_tokens, embed_dim = fields.shape
         
         # Learnable wave speed
@@ -185,22 +203,45 @@ class DynamicFieldPropagator(nn.Module):
             laplacian[:, 0, :] = fields[:, 1, :] - fields[:, 0, :]
             laplacian[:, -1, :] = fields[:, -2, :] - fields[:, -1, :]
         
-        return c**2 * laplacian
+        # Second-order wave equation: ∂²F/∂t² = c²∇²F
+        # Split into first-order system:
+        # ∂F/∂t = v
+        # ∂v/∂t = c²∇²F
+        
+        # Update velocity: ∂v/∂t = c²∇²F
+        acceleration = c**2 * laplacian
+        new_velocities = velocities + self.dt * acceleration
+        
+        # Update field: ∂F/∂t = v
+        field_evolution = new_velocities
+        
+        return field_evolution, new_velocities
     
     def _schrodinger_evolution(self, fields: torch.Tensor) -> torch.Tensor:
         """Compute Schrödinger-like evolution: i∂F/∂t = HF"""
         batch_size, num_tokens, embed_dim = fields.shape
         
-        # Learnable Hamiltonian (Hermitian matrix)
-        H = self.hamiltonian
-        H = (H + H.T) / 2  # Ensure Hermitian
+        # Construct complex Hamiltonian: H = H_real + i*H_imag
+        H_real = self.hamiltonian_real
+        H_imag = self.hamiltonian_imag
+        
+        # Ensure Hermitian: H = (H + H†)/2
+        H_real = (H_real + H_real.T) / 2
+        H_imag = (H_imag - H_imag.T) / 2  # Anti-Hermitian imaginary part
         
         # Apply Hamiltonian: HF
         # [B, N, D] × [D, D] -> [B, N, D]
-        hamiltonian_evolution = torch.einsum('bnd,de->bne', fields, H)
+        hamiltonian_evolution_real = torch.einsum('bnd,de->bne', fields, H_real)
+        hamiltonian_evolution_imag = torch.einsum('bnd,de->bne', fields, H_imag)
         
-        # For real fields, we take the real part
-        return hamiltonian_evolution.real if hamiltonian_evolution.is_complex() else hamiltonian_evolution
+        # For Schrödinger equation: i∂F/∂t = HF
+        # ∂F/∂t = -i*HF = H_imag*F - i*H_real*F
+        # Since we work with real fields, we take the real part
+        evolution_real = hamiltonian_evolution_imag  # Real part of -i*HF
+        evolution_imag = -hamiltonian_evolution_real  # Imaginary part of -i*HF
+        
+        # For real fields, we only keep the real part of the evolution
+        return evolution_real
     
     def _compute_interference_term(self, 
                                   fields: torch.Tensor,  # [B, N, D]
@@ -290,6 +331,10 @@ class AdaptiveFieldPropagator(DynamicFieldPropagator):
         # Initialize evolved fields
         evolved_fields = token_fields.clone()
         
+        # Initialize velocity field for wave equation
+        if self.evolution_type == "wave":
+            velocities = torch.zeros_like(evolved_fields)
+        
         # Multi-step evolution with adaptive parameters
         for step in range(self.num_steps):
             # Compute adaptive parameters based on current field state
@@ -302,7 +347,11 @@ class AdaptiveFieldPropagator(DynamicFieldPropagator):
             adaptive_interference = torch.sigmoid(adaptive_params[:, 2]) * 1.0  # [0, 1]
             
             # Compute evolution terms with adaptive parameters
-            linear_evolution = self._compute_adaptive_linear_evolution(evolved_fields, adaptive_alpha)
+            if self.evolution_type == "wave":
+                linear_evolution, velocities = self._compute_adaptive_linear_evolution(evolved_fields, adaptive_alpha, velocities)
+            else:
+                linear_evolution, _ = self._compute_adaptive_linear_evolution(evolved_fields, adaptive_alpha)
+            
             interference_term = self._compute_interference_term(evolved_fields, positions)
             
             # Update fields with adaptive time step
@@ -320,16 +369,18 @@ class AdaptiveFieldPropagator(DynamicFieldPropagator):
     
     def _compute_adaptive_linear_evolution(self, 
                                           fields: torch.Tensor,  # [B, N, D]
-                                          adaptive_alpha: torch.Tensor) -> torch.Tensor:  # [B]
+                                          adaptive_alpha: torch.Tensor,  # [B]
+                                          velocities: Optional[torch.Tensor] = None) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
         """
         Compute linear evolution with adaptive parameters.
         
         Args:
             fields: Current field values [B, N, D]
             adaptive_alpha: Adaptive evolution coefficient [B]
+            velocities: Velocity field for wave equation [B, N, D] (optional)
             
         Returns:
-            Adaptive linear evolution term [B, N, D]
+            Tuple of (adaptive linear evolution term [B, N, D], updated velocities [B, N, D] or None)
         """
         if self.evolution_type == "diffusion":
             # Compute standard diffusion
@@ -344,10 +395,44 @@ class AdaptiveFieldPropagator(DynamicFieldPropagator):
                 laplacian[:, -1, :] = fields[:, -2, :] - fields[:, -1, :]
             
             # Apply adaptive coefficient
-            return adaptive_alpha.unsqueeze(1).unsqueeze(2) * laplacian
+            return adaptive_alpha.unsqueeze(1).unsqueeze(2) * laplacian, None
+        elif self.evolution_type == "wave":
+            # Compute wave evolution with velocities
+            if velocities is None:
+                velocities = torch.zeros_like(fields)
+            
+            # Learnable wave speed
+            c = torch.clamp(self.wave_speed, min=0.1, max=10.0)
+            
+            # Compute discrete Laplacian
+            laplacian = torch.zeros_like(fields)
+            num_tokens = fields.shape[1]
+            
+            if num_tokens > 2:
+                laplacian[:, 1:-1, :] = (fields[:, 2:, :] - 2 * fields[:, 1:-1, :] + fields[:, :-2, :])
+            
+            if num_tokens > 1:
+                laplacian[:, 0, :] = fields[:, 1, :] - fields[:, 0, :]
+                laplacian[:, -1, :] = fields[:, -2, :] - fields[:, -1, :]
+            
+            # Second-order wave equation: ∂²F/∂t² = c²∇²F
+            # Split into first-order system:
+            # ∂F/∂t = v
+            # ∂v/∂t = c²∇²F
+            
+            # Update velocity: ∂v/∂t = c²∇²F
+            acceleration = c**2 * laplacian
+            new_velocities = velocities + self.dt * acceleration
+            
+            # Update field: ∂F/∂t = v
+            field_evolution = new_velocities
+            
+            # Return both field evolution and updated velocities
+            return field_evolution, new_velocities
         else:
             # For other evolution types, use standard computation
-            return self._compute_linear_evolution(fields)
+            standard_evolution, _ = self._compute_linear_evolution(fields)
+            return standard_evolution, None
 
 
 class CausalFieldPropagator(DynamicFieldPropagator):
@@ -388,23 +473,28 @@ class CausalFieldPropagator(DynamicFieldPropagator):
     
     def _compute_linear_evolution(self, 
                                  fields: torch.Tensor,  # [B, N, D]
-                                 positions: Optional[torch.Tensor] = None) -> torch.Tensor:  # [B, N, D]
+                                 positions: Optional[torch.Tensor] = None,
+                                 velocities: Optional[torch.Tensor] = None) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
         """
         Compute causal linear evolution.
         
         Args:
             fields: Current field values [B, N, D]
             positions: Token positions [B, N, P] (optional)
+            velocities: Velocity field for wave equation [B, N, D] (optional)
             
         Returns:
-            Causal linear evolution term [B, N, D]
+            Tuple of (causal linear evolution term [B, N, D], updated velocities [B, N, D] or None)
         """
         if self.evolution_type == "diffusion":
-            return self._causal_diffusion_evolution(fields)
+            evolution = self._causal_diffusion_evolution(fields)
+            return evolution, None
         elif self.evolution_type == "wave":
-            return self._causal_wave_evolution(fields)
+            evolution = self._causal_wave_evolution(fields)
+            return evolution, None
         else:
-            return super()._compute_linear_evolution(fields, positions)
+            # Fall back to parent implementation
+            return super()._compute_linear_evolution(fields, positions, velocities)
     
     def _causal_diffusion_evolution(self, fields: torch.Tensor) -> torch.Tensor:
         """Compute causal diffusion evolution."""

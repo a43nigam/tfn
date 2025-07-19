@@ -19,6 +19,7 @@ import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from model import TFNClassifier, TFNRegressor
+from tfn.model.tfn_enhanced import create_enhanced_tfn_model
 from utils.data_utils import (
     create_synthetic_data, create_synthetic_regression_data,
     TextClassificationDataset, SequenceRegressionDataset,
@@ -35,7 +36,7 @@ def parse_args():
     
     # Model arguments
     parser.add_argument('--model', type=str, default='tfn_classifier',
-                       choices=['tfn_classifier', 'tfn_regressor'],
+                       choices=['tfn_classifier', 'tfn_regressor', 'enhanced_tfn_classifier', 'enhanced_tfn_regressor'],
                        help='Model type to train')
     parser.add_argument('--embed_dim', type=int, default=64,
                        help='Embedding dimension')
@@ -53,6 +54,25 @@ def parse_args():
                        help='Number of evolution time steps')
     parser.add_argument('--dropout', type=float, default=0.1,
                        help='Dropout rate')
+    
+    # Enhanced TFN specific parameters
+    parser.add_argument('--interference_type', type=str, default='standard',
+                       choices=['standard', 'causal', 'multiscale', 'physics'],
+                       help='Field interference type for Enhanced TFN')
+    parser.add_argument('--propagator_type', type=str, default='standard',
+                       choices=['standard', 'adaptive', 'causal'],
+                       help='Field propagator type for Enhanced TFN')
+    parser.add_argument('--operator_type', type=str, default='standard',
+                       choices=['standard', 'fractal', 'causal', 'meta'],
+                       help='Field interaction operator type for Enhanced TFN')
+    parser.add_argument('--pos_dim', type=int, default=1,
+                       help='Position dimension (1 for 1D, 2 for 2D)')
+    parser.add_argument('--num_heads', type=int, default=8,
+                       help='Number of attention heads for Enhanced TFN')
+    parser.add_argument('--use_physics_constraints', action='store_true',
+                       help='Use physics constraints during training for Enhanced TFN')
+    parser.add_argument('--constraint_weight', type=float, default=0.1,
+                       help='Weight for physics constraint loss')
     
     # Data arguments
     parser.add_argument('--data', type=str, default='synthetic',
@@ -110,6 +130,27 @@ def create_model(args, device: torch.device):
             dropout=args.dropout
         )
         
+    elif args.model == 'enhanced_tfn_classifier':
+        # For synthetic data
+        vocab_size = 1000
+        num_classes = 3
+        
+        model = create_enhanced_tfn_model(
+            vocab_size=vocab_size,
+            embed_dim=args.embed_dim,
+            num_layers=args.num_layers,
+            pos_dim=args.pos_dim,
+            kernel_type=args.kernel_type,
+            evolution_type=args.evolution_type,
+            interference_type=args.interference_type,
+            propagator_type=args.propagator_type,
+            operator_type=args.operator_type,
+            grid_size=args.grid_size,
+            num_heads=args.num_heads,
+            dropout=args.dropout,
+            max_seq_len=args.seq_len
+        )
+        
     elif args.model == 'tfn_regressor':
         input_dim = 32
         output_dim = 8
@@ -125,6 +166,15 @@ def create_model(args, device: torch.device):
             time_steps=args.time_steps,
             dropout=args.dropout
         )
+        
+    elif args.model == 'enhanced_tfn_regressor':
+        input_dim = 32
+        output_dim = 8
+        
+        # For Enhanced TFN regressor, we need to create a custom model
+        # since the base Enhanced TFN is designed for classification
+        # This would require a custom implementation
+        raise NotImplementedError("Enhanced TFN regressor not yet implemented")
     
     model = model.to(device)
     return model
@@ -133,7 +183,7 @@ def create_model(args, device: torch.device):
 def create_data(args):
     """Create training and validation data."""
     if args.data == 'synthetic':
-        if args.model == 'tfn_classifier':
+        if args.model in ['tfn_classifier', 'enhanced_tfn_classifier']:
             # Create synthetic text classification data
             train_texts, train_labels = create_synthetic_data(
                 num_samples=args.num_samples,
@@ -197,7 +247,8 @@ def create_data(args):
             return train_loader, val_loader, 'regression', None
 
 
-def train_epoch(model, train_loader, optimizer, criterion, device, task_type, log_interval):
+def train_epoch(model, train_loader, optimizer, criterion, device, task_type, log_interval, 
+                use_physics_constraints=False, constraint_weight=0.1):
     """Train for one epoch."""
     model.train()
     total_loss = 0.0
@@ -219,6 +270,13 @@ def train_epoch(model, train_loader, optimizer, criterion, device, task_type, lo
             
             predictions = model(features)
             loss = criterion(predictions, targets)
+        
+        # Add physics constraints if enabled
+        if use_physics_constraints and hasattr(model, 'get_physics_constraints'):
+            constraints = model.get_physics_constraints()
+            if constraints:
+                constraint_loss = sum(constraints.values())
+                loss = loss + constraint_weight * constraint_loss
         
         loss.backward()
         optimizer.step()
@@ -263,7 +321,9 @@ def main():
     
     for epoch in range(args.epochs):
         # Train
-        train_loss = train_epoch(model, train_loader, optimizer, criterion, device, task_type, args.log_interval)
+        train_loss = train_epoch(model, train_loader, optimizer, criterion, device, task_type, args.log_interval,
+                                 use_physics_constraints=args.use_physics_constraints,
+                                 constraint_weight=args.constraint_weight)
         train_losses.append(train_loss)
         
         # Validate

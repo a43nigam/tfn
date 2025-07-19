@@ -38,6 +38,7 @@ from torch.utils.data import DataLoader, TensorDataset
 
 # Local imports
 from tfn.model.tfn_classifiers import TFNClassifier
+from tfn.model.tfn_enhanced import create_enhanced_tfn_model
 from tfn.model.baseline_classifiers import (
     TransformerClassifier, PerformerClassifier, LSTMClassifier, CNNClassifier
 )
@@ -126,7 +127,8 @@ def _get_dataloaders(task_name: str, seq_len: int, batch_size: int,
 # -----------------------------------------------------------------------------
 
 def _train_epoch(model: nn.Module, loader: DataLoader, criterion: nn.Module,
-                 optimizer: torch.optim.Optimizer, device: torch.device) -> float:
+                 optimizer: torch.optim.Optimizer, device: torch.device,
+                 use_physics_constraints: bool = False, constraint_weight: float = 0.1) -> float:
     model.train()
     total_loss = 0.0
     for input_ids, labels in loader:
@@ -134,6 +136,14 @@ def _train_epoch(model: nn.Module, loader: DataLoader, criterion: nn.Module,
         optimizer.zero_grad()
         logits = model(input_ids)
         loss = criterion(logits, labels)
+        
+        # Add physics constraints if enabled
+        if use_physics_constraints and hasattr(model, 'get_physics_constraints'):
+            constraints = model.get_physics_constraints()
+            if constraints:
+                constraint_loss = sum(constraints.values())
+                loss = loss + constraint_weight * constraint_loss
+        
         loss.backward()
         optimizer.step()
         total_loss += loss.item() * input_ids.size(0)
@@ -191,7 +201,7 @@ def parse_args() -> argparse.Namespace:
 
     # Model selection
     p.add_argument("--model", type=str, default="tfn",
-                   choices=["tfn", "transformer", "performer", "lstm", "cnn"],
+                   choices=["tfn", "transformer", "performer", "lstm", "cnn", "enhanced_tfn"],
                    help="Model architecture to use")
 
     # Model hyper-parameters
@@ -204,6 +214,25 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--grid_size", type=int, default=64)
     p.add_argument("--time_steps", type=int, default=3)
     p.add_argument("--dropout", type=float, default=0.1)
+    
+    # Enhanced TFN specific parameters
+    p.add_argument("--interference_type", type=str, default="standard",
+                   choices=["standard", "causal", "multiscale", "physics"],
+                   help="Field interference type for Enhanced TFN")
+    p.add_argument("--propagator_type", type=str, default="standard",
+                   choices=["standard", "adaptive", "causal"],
+                   help="Field propagator type for Enhanced TFN")
+    p.add_argument("--operator_type", type=str, default="standard",
+                   choices=["standard", "fractal", "causal", "meta"],
+                   help="Field interaction operator type for Enhanced TFN")
+    p.add_argument("--pos_dim", type=int, default=1,
+                   help="Position dimension (1 for 1D, 2 for 2D)")
+    p.add_argument("--num_heads", type=int, default=8,
+                   help="Number of attention heads for Enhanced TFN")
+    p.add_argument("--use_physics_constraints", action="store_true",
+                   help="Use physics constraints during training for Enhanced TFN")
+    p.add_argument("--constraint_weight", type=float, default=0.1,
+                   help="Weight for physics constraint loss")
 
     # Training hyper-parameters
     p.add_argument("--batch_size", type=int, default=32)
@@ -278,6 +307,22 @@ def main() -> None:
             num_classes=num_classes,
             dropout=args.dropout,
         )
+    elif args.model == "enhanced_tfn":
+        model = create_enhanced_tfn_model(
+            vocab_size=vocab_size,
+            embed_dim=args.embed_dim,
+            num_layers=args.num_layers,
+            pos_dim=args.pos_dim,
+            kernel_type=args.kernel_type,
+            evolution_type=args.evolution_type,
+            interference_type=args.interference_type,
+            propagator_type=args.propagator_type,
+            operator_type=args.operator_type,
+            grid_size=args.grid_size,
+            num_heads=args.num_heads,
+            dropout=args.dropout,
+            max_seq_len=args.seq_len
+        )
     else:
         raise ValueError(f"Unknown model: {args.model}")
     
@@ -307,7 +352,9 @@ def main() -> None:
 
     best_val_metric = float('inf') if args.task == "stsb" else 0.0
     for epoch in range(1, args.epochs + 1):
-        train_loss = _train_epoch(model, train_loader, criterion, optimizer, device)
+        train_loss = _train_epoch(model, train_loader, criterion, optimizer, device,
+                                   use_physics_constraints=args.use_physics_constraints,
+                                   constraint_weight=args.constraint_weight)
         metrics = _evaluate(model, val_loader, criterion, device, args.task)
         val_loss = metrics["loss"]
 

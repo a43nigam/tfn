@@ -61,10 +61,21 @@ class TFNSeqModel(nn.Module):
         seq_len: int = 512,
         embed_dim: int = 128,
         grid_size: int = 256,
+        kernel_type: str = "rbf",
+        evolution_type: str = "cnn",
+        time_steps: int = 3,
+        dropout: float = 0.1,
     ) -> None:
         super().__init__()
         self.embed = nn.Embedding(vocab_size, embed_dim)
-        self.tfn = TrainableTFNLayer(embed_dim=embed_dim, grid_size=grid_size)
+        self.tfn = TrainableTFNLayer(
+            embed_dim=embed_dim, 
+            grid_size=grid_size,
+            kernel_type=kernel_type,
+            evolution_type=evolution_type,
+            time_steps=time_steps,
+            dropout=dropout
+        )
         self.out_proj = nn.Linear(embed_dim, vocab_size, bias=False)
         self.max_len = seq_len
 
