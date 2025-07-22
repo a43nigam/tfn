@@ -20,8 +20,7 @@ TFNSequenceRegressor = TFNRegressor
 # Enhanced TFN model
 from .tfn_enhanced import EnhancedTFNModel
 from .tfn_pytorch import ImageTFN as TFNClassifier2D  # alias for 2D image model
-from .baseline_classifiers import TransformerClassifier, PerformerClassifier, LSTMClassifier, CNNClassifier
-from .baseline_regressors import TransformerRegressor, PerformerRegressor, LSTMRegressor, CNNRegressor
+from .baselines import TransformerBaseline, PerformerBaseline, LSTMBaseline, CNNBaseline
 from .seq_baselines import TFNSeqModel, SimpleTransformerSeqModel, SimplePerformerSeqModel
 
 # Model Registry with all parameters and evolution types
@@ -218,7 +217,7 @@ MODEL_REGISTRY = {
     # ============================================================================
     
     'transformer_classifier': {
-        'class': TransformerClassifier,
+        'class': TransformerBaseline,
         'task_type': 'classification',
         'evolution_types': [],
         'components': ['transformer_encoder', 'classification_head'],
@@ -233,7 +232,7 @@ MODEL_REGISTRY = {
     },
     
     'performer_classifier': {
-        'class': PerformerClassifier,
+        'class': PerformerBaseline,
         'task_type': 'classification',
         'evolution_types': [],
         'components': ['performer_encoder', 'classification_head'],
@@ -248,7 +247,7 @@ MODEL_REGISTRY = {
     },
     
     'lstm_classifier': {
-        'class': LSTMClassifier,
+        'class': LSTMBaseline,
         'task_type': 'classification',
         'evolution_types': [],
         'components': ['lstm_encoder', 'classification_head'],
@@ -263,7 +262,7 @@ MODEL_REGISTRY = {
     },
     
     'cnn_classifier': {
-        'class': CNNClassifier,
+        'class': CNNBaseline,
         'task_type': 'classification',
         'evolution_types': [],
         'components': ['cnn_encoder', 'classification_head'],
@@ -277,7 +276,7 @@ MODEL_REGISTRY = {
     },
     
     'transformer_regressor': {
-        'class': TransformerRegressor,
+        'class': TransformerBaseline,
         'task_type': 'regression',
         'evolution_types': [],
         'components': ['transformer_encoder', 'regression_head'],
@@ -292,7 +291,7 @@ MODEL_REGISTRY = {
     },
     
     'performer_regressor': {
-        'class': PerformerRegressor,
+        'class': PerformerBaseline,
         'task_type': 'regression',
         'evolution_types': [],
         'components': ['performer_encoder', 'regression_head'],
@@ -307,7 +306,7 @@ MODEL_REGISTRY = {
     },
     
     'lstm_regressor': {
-        'class': LSTMRegressor,
+        'class': LSTMBaseline,
         'task_type': 'regression',
         'evolution_types': [],
         'components': ['lstm_encoder', 'regression_head'],
@@ -322,7 +321,7 @@ MODEL_REGISTRY = {
     },
     
     'cnn_regressor': {
-        'class': CNNRegressor,
+        'class': CNNBaseline,
         'task_type': 'regression',
         'evolution_types': [],
         'components': ['cnn_encoder', 'regression_head'],

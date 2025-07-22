@@ -359,8 +359,9 @@ def create_model_factory():
                 task="classification"
             )
         elif model_type == 'transformer':
-            from ..model.baseline_classifiers import TransformerClassifier
-            return TransformerClassifier(
+            from ..model.baselines import TransformerBaseline
+            return TransformerBaseline(
+                task='classification',
                 vocab_size=10000,
                 embed_dim=config.embed_dim,
                 num_classes=2,
@@ -368,8 +369,9 @@ def create_model_factory():
                 dropout=config.dropout
             )
         elif model_type == 'lstm':
-            from ..model.baseline_classifiers import LSTMClassifier
-            return LSTMClassifier(
+            from ..model.baselines import LSTMBaseline
+            return LSTMBaseline(
+                task='classification',
                 vocab_size=10000,
                 embed_dim=config.embed_dim,
                 num_classes=2,
@@ -377,8 +379,9 @@ def create_model_factory():
                 dropout=config.dropout
             )
         elif model_type == 'cnn':
-            from ..model.baseline_classifiers import CNNClassifier
-            return CNNClassifier(
+            from ..model.baselines import CNNBaseline
+            return CNNBaseline(
+                task='classification',
                 vocab_size=10000,
                 embed_dim=config.embed_dim,
                 num_classes=2,
