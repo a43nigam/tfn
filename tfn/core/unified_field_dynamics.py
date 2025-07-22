@@ -19,7 +19,7 @@ import torch.nn.functional as F
 from typing import Tuple, Optional, Dict, Any, Literal
 import math
 from .field_interference import TokenFieldInterference
-from .dynamic_propagation import DynamicFieldPropagator
+from .field_evolution import DynamicFieldPropagator
 
 
 class UnifiedFieldDynamics(nn.Module):

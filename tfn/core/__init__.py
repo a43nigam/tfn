@@ -24,10 +24,6 @@ from .field_interference import (
     MultiScaleFieldInterference, PhysicsConstrainedInterference,
     create_field_interference
 )
-from .dynamic_propagation import (
-    DynamicFieldPropagator, AdaptiveFieldPropagator, 
-    CausalFieldPropagator, create_field_propagator
-)
 from .unified_field_dynamics import (
     UnifiedFieldDynamics, DiffusionOperator, WaveOperator,
     SchrodingerOperator, PhysicsConstraintOperator, StabilityMonitor,
