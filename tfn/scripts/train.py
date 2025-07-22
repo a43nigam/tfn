@@ -20,11 +20,14 @@ from pathlib import Path
 from typing import Dict, Any
 
 import torch
+import inspect
 
 # Import dynamic registries -----------------------------------------------------
 from tfn.model.registry import (
     get_model_config,
     validate_model_task_compatibility,
+    get_required_params,
+    get_optional_params,
 )
 from tfn.datasets.registry import (
     DATASET_REGISTRY,
@@ -166,33 +169,69 @@ def main(argv: list[str] | None = None):
     m_cfg = get_model_config(base_args.model)
     d_cfg = get_dataset_config(base_args.dataset)
 
-    # Build kwargs from defaults (skip extensive dynamic argparse for brevity)
-    model_kwargs = m_cfg.get("defaults", {}).copy()
-    dataset_kwargs = d_cfg.get("default_params", {}).copy()
+    # Dynamically add model-specific arguments
+    model_required = get_required_params(base_args.model)
+    model_optional = get_optional_params(base_args.model)
 
-    # Instantiate dataset ---------------------------------------------------
+    # Dynamically add dataset-specific arguments by inspecting loader signature
     loader_fn = d_cfg["loader_function"]
     if isinstance(loader_fn, str):
-        # find in tfn.tfn_datasets namespace
         from importlib import import_module
-
         parts = loader_fn.split(".")
         mod = import_module(".".join(["tfn", "tfn_datasets"] + parts[:-1]))
         loader_fn = getattr(mod, parts[-1])
+    dataset_params = []
+    dataset_defaults = {}
+    sig = inspect.signature(loader_fn)
+    for name, param in sig.parameters.items():
+        if name == "self":
+            continue
+        if param.default is inspect.Parameter.empty:
+            dataset_params.append(name)
+        else:
+            dataset_defaults[name] = param.default
 
+    # Build a new parser with all dynamic args
+    parser = _build_parser()
+    for param in model_required:
+        if param not in {"task", "dataset", "model", "epochs", "batch_size", "lr", "device", "num_workers", "dry_run"}:
+            parser.add_argument(f"--{param}", required=True)
+    for param in model_optional:
+        if param not in {"task", "dataset", "model", "epochs", "batch_size", "lr", "device", "num_workers", "dry_run"}:
+            parser.add_argument(f"--{param}", default=m_cfg.get("defaults", {}).get(param))
+    for param in dataset_params:
+        if param not in {"task", "dataset", "model", "epochs", "batch_size", "lr", "device", "num_workers", "dry_run"}:
+            parser.add_argument(f"--{param}", required=True)
+    for param, default in dataset_defaults.items():
+        if param not in {"task", "dataset", "model", "epochs", "batch_size", "lr", "device", "num_workers", "dry_run"}:
+            parser.add_argument(f"--{param}", type=type(default), default=default)
+
+    args = parser.parse_args(argv)
+
+    # Build kwargs from parsed args
+    model_kwargs = m_cfg.get("defaults", {}).copy()
+    dataset_kwargs = d_cfg.get("default_params", {}).copy()
+    for param in model_required + model_optional:
+        if hasattr(args, param):
+            model_kwargs[param] = getattr(args, param)
+    for param in dataset_params + list(dataset_defaults.keys()):
+        if hasattr(args, param):
+            dataset_kwargs[param] = getattr(args, param)
+
+    # Instantiate dataset ---------------------------------------------------
     train_ds, val_ds, *extra = loader_fn(**dataset_kwargs)
 
     train_loader = torch.utils.data.DataLoader(
         train_ds,
-        batch_size=base_args.batch_size,
+        batch_size=args.batch_size,
         shuffle=True,
-        num_workers=base_args.num_workers,
+        num_workers=args.num_workers,
     )
     val_loader = torch.utils.data.DataLoader(
         val_ds,
-        batch_size=base_args.batch_size,
+        batch_size=args.batch_size,
         shuffle=False,
-        num_workers=base_args.num_workers,
+        num_workers=args.num_workers,
     )
 
     # Add extra dataset info (e.g., vocab_size) to model_kwargs -------------
@@ -203,22 +242,22 @@ def main(argv: list[str] | None = None):
     model_cls = m_cfg["class"]
     model = model_cls(**model_kwargs)
 
-    if base_args.dry_run:
+    if args.dry_run:
         print("[DRY-RUN] Model & dataset instantiated successfully – exiting.")
         return
 
     metrics = train_and_evaluate(
         model,
-        base_args.task,
+        args.task,
         train_loader,
         val_loader,
-        epochs=base_args.epochs,
-        device=base_args.device,
-        lr=base_args.lr,
+        epochs=args.epochs,
+        device=args.device,
+        lr=args.lr,
     )
 
     # Save metrics to outputs/ directory -----------------------------------
-    out_dir = Path("outputs") / f"{base_args.dataset}_{base_args.model}"
+    out_dir = Path("outputs") / f"{args.dataset}_{args.model}"
     out_dir.mkdir(parents=True, exist_ok=True)
     import json
 
