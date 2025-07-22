@@ -6,7 +6,29 @@ This script demonstrates the current functionality and limitations of the TFN la
 
 import torch
 import torch.nn as nn
-from tfn_layer import tfn_layer, project_field, evolve_field_cnn, sample_field
+from tfn.model.tfn_base import TrainableTFNLayer
+from tfn.core.field_projection import FieldProjector
+from tfn.core.field_evolution import CNNFieldEvolver
+from tfn.core.field_sampling import sample_field
+
+# Helper functions to match old API for demo
+def tfn_layer(embeddings, positions, kernel_type="rbf", evolution_type="cnn", grid_size=20, time_steps=2):
+    layer = TrainableTFNLayer(
+        embed_dim=embeddings.shape[-1],
+        kernel_type=kernel_type,
+        evolution_type=evolution_type,
+        time_steps=time_steps
+    )
+    grid_points = torch.linspace(0, 1, grid_size).unsqueeze(0).unsqueeze(-1).to(embeddings.device)
+    return layer(embeddings, positions, grid_points)
+
+def project_field(embeddings, positions, grid_points, kernel_type="rbf"):
+    projector = FieldProjector(embed_dim=embeddings.shape[-1], pos_dim=positions.shape[-1], kernel_type=kernel_type)
+    return projector(embeddings, positions, grid_points)
+
+def evolve_field_cnn(field, grid_points, time_steps=2):
+    evolver = CNNFieldEvolver(embed_dim=field.shape[-1], time_steps=time_steps)
+    return evolver(field, grid_points)
 
 def demonstrate_tfn_functionality():
     """Show what the TFN layer actually does step by step."""

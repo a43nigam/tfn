@@ -14,8 +14,20 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-# Import the TFN layer functions
-from tfn_layer import tfn_layer
+# Import the TFN layer from the main package (recommended)
+from tfn.model.tfn_base import TrainableTFNLayer
+
+# Helper function to match old API for demo
+def tfn_layer(embeddings, positions, kernel_type="rbf", evolution_type="cnn", grid_size=50, time_steps=2):
+    layer = TrainableTFNLayer(
+        embed_dim=embeddings.shape[-1],
+        kernel_type=kernel_type,
+        evolution_type=evolution_type,
+        time_steps=time_steps
+    )
+    # Generate grid points
+    grid_points = torch.linspace(0, 1, grid_size).unsqueeze(0).unsqueeze(-1).to(embeddings.device)
+    return layer(embeddings, positions, grid_points)
 
 def simple_tfn_example():
     """Simple example showing TFN layer usage."""
