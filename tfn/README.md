@@ -212,6 +212,7 @@ python -m tfn.scripts.train_arxiv_tfn --embed_dim 512 --num_layers 4 --batch_siz
 #### Long Text Training
 ```bash
 python -m tfn.scripts.train_long [options]
+
 ```
 
 #### NER Training
@@ -406,3 +407,8 @@ To add new datasets or models:
 2. Add model definition in `tfn/model/`
 3. Update training script with new options
 4. Update this README with new commands 
+
+## ⚠️ Mixed-Precision Limitation
+Currently, the ImageTFN model does not fully support mixed-precision (AMP) training due to dtype issues. If you attempt to use torch.cuda.amp or similar features, you may encounter runtime errors. This is a known limitation and will be addressed in a future release.
+
+**Tip:** Always run scripts as modules using `python -m tfn.scripts.train ...` to ensure robust imports and package resolution, especially on platforms like Kaggle or Colab. 
