@@ -345,8 +345,8 @@ def create_model_factory():
     def model_factory(config: HyperparameterConfig, model_type: str):
         """Create model from configuration."""
         if model_type == 'tfn':
-            from ..model.tfn_classifiers import TFNClassifier
-            return TFNClassifier(
+            from ..model.tfn_unified import TFN
+            return TFN(
                 vocab_size=10000,  # Default vocab size
                 embed_dim=config.embed_dim,
                 num_classes=2,  # Default for binary classification

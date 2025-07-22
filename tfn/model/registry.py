@@ -6,9 +6,15 @@ parameters, evolution types, and compatibility information.
 """
 
 from typing import Dict, List, Any, Optional
-from .tfn_classifiers import TFNClassifier, EnhancedTFNClassifier, TFNRegressor
-# Aliased regressors mapping to UnifiedTFN for backward compatibility
-from .tfn_regressors import TFNTimeSeriesRegressor, TFNMultiStepRegressor, TFNSequenceRegressor
+# Legacy classifier/regressor aliases were removed; map to core TFN
+from .tfn_unified import TFN as TFNClassifier, TFN as TFNRegressor, UnifiedTFN as _Alias
+# Placeholder enhanced alias (points to core TFN or future enhanced)
+EnhancedTFNClassifier = TFNClassifier
+
+# Time-series regressors map to the same TFN for now (kept for registry compatibility)
+TFNTimeSeriesRegressor = TFNRegressor
+TFNMultiStepRegressor = TFNRegressor
+TFNSequenceRegressor = TFNRegressor
 # Time-series regressors can still map to UnifiedTFN if needed; keep imports minimal
 # Deprecated/legacy 2-D implementation replaced by ImageTFN but registry keeps entry for compat
 # Enhanced TFN model

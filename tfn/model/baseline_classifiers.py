@@ -10,23 +10,12 @@ Includes:
 4. CNNClassifier - CNN-based classifier
 """
 
-from typing import Optional
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-
-class LearnedPositionalEmbeddings(nn.Module):
-    """Standard learned absolute positional embeddings."""
-
-    def __init__(self, max_len: int, embed_dim: int) -> None:
-        super().__init__()
-        self.pos = nn.Embedding(max_len, embed_dim)
-        nn.init.normal_(self.pos.weight, mean=0.0, std=0.02)
-
-    def forward(self, seq_len: int) -> torch.Tensor:  # [L, D]
-        idx = torch.arange(seq_len, device=self.pos.weight.device)
-        return self.pos(idx)
+# Shared components -----------------------------------------------------------
+from .shared_layers import LearnedPositionalEmbeddings, LinearAttention
 
 
 class TransformerClassifier(nn.Module):
@@ -74,40 +63,6 @@ class TransformerClassifier(nn.Module):
         # Classification
         logits = self.classifier(pooled)  # [B, num_classes]
         return logits
-
-
-class LinearAttention(nn.Module):
-    """Single-head linear (FAVOR) attention approximation."""
-
-    def __init__(self, dim: int, proj_dim: int = 64) -> None:
-        super().__init__()
-        self.dim = dim
-        self.proj_dim = proj_dim
-        self.query = nn.Linear(dim, dim, bias=False)
-        self.key = nn.Linear(dim, dim, bias=False)
-        self.value = nn.Linear(dim, dim, bias=False)
-        # Random orthogonal projection matrix – fixed after init
-        q = torch.randn(dim, proj_dim)
-        q, _ = torch.linalg.qr(q, mode="reduced")
-        self.register_buffer("projection", q)  # [D, P]
-
-    @staticmethod
-    def _feature_map(x: torch.Tensor) -> torch.Tensor:
-        return F.elu(x) + 1  # guarantees positivity
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:  # [B, L, D]
-        q, k, v = self.query(x), self.key(x), self.value(x)
-        # Project to low-dimensional features
-        q_prime = self._feature_map(q @ self.projection)  # [B, L, P]
-        k_prime = self._feature_map(k @ self.projection)  # [B, L, P]
-
-        # Compute KV term first: [B, P, D]
-        kv = torch.einsum("blp,bld->bpd", k_prime, v)
-        # Attention numerator: [B, L, D]
-        num = torch.einsum("blp,bpd->bld", q_prime, kv)
-        # Normaliser: [B, L, 1]
-        z = 1 / (q_prime.sum(dim=-1, keepdim=True) + 1e-8)
-        return num * z  # element-wise broadcast
 
 
 class PerformerClassifier(nn.Module):
