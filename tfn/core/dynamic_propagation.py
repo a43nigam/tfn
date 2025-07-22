@@ -300,6 +300,25 @@ class DynamicFieldPropagator(nn.Module):
         
         return interference_term
 
+    # ------------------------------------------------------------------
+    # Discrete Laplacian helper (1-D sequence, Neumann boundaries)
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _laplacian(tensor: torch.Tensor) -> torch.Tensor:
+        """Return discrete 1-D Laplacian of *tensor* with zero-gradient boundaries.
+
+        Input shape: ``[B, N, D]``
+        """
+        lap = torch.zeros_like(tensor)
+        n = tensor.shape[1]
+        if n > 2:
+            lap[:, 1:-1, :] = tensor[:, 2:, :] - 2 * tensor[:, 1:-1, :] + tensor[:, :-2, :]
+        if n > 1:
+            lap[:, 0, :] = tensor[:, 1, :] - tensor[:, 0, :]
+            lap[:, -1, :] = tensor[:, -2, :] - tensor[:, -1, :]
+        return lap
+
 
 class AdaptiveFieldPropagator(DynamicFieldPropagator):
     """

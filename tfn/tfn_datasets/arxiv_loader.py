@@ -13,6 +13,7 @@ from torch.utils.data import TensorDataset
 
 # Optional dependency ---------------------------------------------------------
 from tfn.data import tokenization as _tok
+from tfn.utils.data_utils import split_indices
 
 # ---------------------------------------------------------------------------
 # Tokenisation helpers (delegate to central util) ----------------------------
@@ -90,20 +91,13 @@ def load_arxiv(
     num_classes = len(label2idx)
     print(f"Found {num_classes} categories: {list(label2idx.keys())[:10]}...")
 
-    # Split train/val
-    rng = random.Random(42)
-    idx = list(range(len(texts)))
-    rng.shuffle(idx)
-    
-    val_idx = set(idx[:val_split])
-    train_texts, train_labels, val_texts, val_labels = [], [], [], []
-    for i in idx:
-        if i in val_idx:
-            val_texts.append(texts[i])
-            val_labels.append(label_indices[i])
-        else:
-            train_texts.append(texts[i])
-            train_labels.append(label_indices[i])
+    train_ratio = 1 - val_split / len(texts)
+    train_idx, val_idx = split_indices(len(texts), train_ratio=train_ratio, seed=42)
+
+    train_texts = [texts[i] for i in train_idx]
+    train_labels = [label_indices[i] for i in train_idx]
+    val_texts = [texts[i] for i in val_idx]
+    val_labels = [label_indices[i] for i in val_idx]
 
     word2idx = _build_vocab(train_texts, vocab_size)
     train_ids = _texts_to_tensor(train_texts, word2idx, seq_len, shuffle_train)

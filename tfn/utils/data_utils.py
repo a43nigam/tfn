@@ -9,6 +9,7 @@ import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
 from typing import List, Tuple, Optional, Dict, Any
 import numpy as np
+import random
 
 
 class TFNDataset(Dataset):
@@ -146,7 +147,6 @@ def generate_positions(seq_len: int, batch_size: int = 1,
 def create_synthetic_data(num_samples: int = 1000, seq_len: int = 50, 
                          vocab_size: int = 1000, num_classes: int = 3) -> Tuple[List[str], List[int]]:
     """Create synthetic text classification data."""
-    import random
     
     # Generate random "words"
     words = [f"word_{i}" for i in range(vocab_size)]
@@ -183,3 +183,28 @@ def create_synthetic_regression_data(num_samples: int = 1000, seq_len: int = 50,
         targets.append(target)
     
     return sequences, targets
+
+
+def split_indices(length: int, train_ratio: float = 0.8, *, seed: int = 42, shuffle: bool = True):
+    """Return (train_idx, val_idx) lists for a sequence of *length*."""
+    idx = list(range(length))
+    if shuffle:
+        random.Random(seed).shuffle(idx)
+    split = int(train_ratio * length)
+    return idx[:split], idx[split:]
+
+
+def split_dataset(seq_or_dataset, train_ratio: float = 0.8, *, seed: int = 42, shuffle: bool = True):
+    """Split a *sequence* or torch Dataset into train/val subsets.
+
+    Returns two lists of indices if *seq_or_dataset* is a sequence, otherwise
+    returns two `torch.utils.data.Subset` objects when a `Dataset` is passed.
+    """
+    length = len(seq_or_dataset)
+    train_idx, val_idx = split_indices(length, train_ratio=train_ratio, seed=seed, shuffle=shuffle)
+
+    if isinstance(seq_or_dataset, torch.utils.data.Dataset):
+        return (torch.utils.data.Subset(seq_or_dataset, train_idx),
+                torch.utils.data.Subset(seq_or_dataset, val_idx))
+    else:
+        return train_idx, val_idx

@@ -16,6 +16,7 @@ from torch.utils.data import TensorDataset
 # ---------------------------------------------------------------------------
 
 from tfn.data import tokenization as _tok
+from tfn.utils.data_utils import split_indices
 
 # Alias helpers so the rest of this file stays unchanged --------------------
 
@@ -78,22 +79,15 @@ def load_sst2(
     else:
         raise RuntimeError("SST-2 loader requires either Kaggle dataset or `datasets` library.")
 
-    # Split train/val with better validation split
-    rng = random.Random(42)
-    idx = list(range(len(texts)))
-    rng.shuffle(idx)
-    
-    # Use larger validation split for more reliable metrics (10% instead of fixed 1000)
-    val_split = max(val_split, int(0.1 * len(texts)))
-    val_idx = set(idx[:val_split])
-    train_texts, train_labels, val_texts, val_labels = [], [], [], []
-    for i in idx:
-        if i in val_idx:
-            val_texts.append(texts[i])
-            val_labels.append(labels[i])
-        else:
-            train_texts.append(texts[i])
-            train_labels.append(labels[i])
+    # Deterministic split via utils helper --------------------------------
+    val_count = max(val_split, int(0.1 * len(texts)))
+    train_ratio = 1 - val_count / len(texts)
+    train_idx, val_idx = split_indices(len(texts), train_ratio=train_ratio, seed=42)
+
+    train_texts = [texts[i] for i in train_idx]
+    train_labels = [labels[i] for i in train_idx]
+    val_texts = [texts[i] for i in val_idx]
+    val_labels = [labels[i] for i in val_idx]
 
     print(f"📊 Dataset split: {len(train_texts)} train, {len(val_texts)} validation")
     
@@ -142,22 +136,15 @@ def load_mrpc(
     else:
         raise RuntimeError("MRPC loader requires either Kaggle dataset or `datasets` library.")
 
-    # Split train/val with better validation split
-    rng = random.Random(42)
-    idx = list(range(len(texts)))
-    rng.shuffle(idx)
-    
-    # Use larger validation split for more reliable metrics
-    val_split = max(val_split, int(0.1 * len(texts)))
-    val_idx = set(idx[:val_split])
-    train_texts, train_labels, val_texts, val_labels = [], [], [], []
-    for i in idx:
-        if i in val_idx:
-            val_texts.append(texts[i])
-            val_labels.append(labels[i])
-        else:
-            train_texts.append(texts[i])
-            train_labels.append(labels[i])
+    # Deterministic split ---------------------------------------------------
+    val_count = max(val_split, int(0.1 * len(texts)))
+    train_ratio = 1 - val_count / len(texts)
+    train_idx, val_idx = split_indices(len(texts), train_ratio=train_ratio, seed=42)
+
+    train_texts = [texts[i] for i in train_idx]
+    train_labels = [labels[i] for i in train_idx]
+    val_texts = [texts[i] for i in val_idx]
+    val_labels = [labels[i] for i in val_idx]
 
     print(f"📊 MRPC split: {len(train_texts)} train, {len(val_texts)} validation")
     
@@ -202,20 +189,13 @@ def load_qqp(
     else:
         raise RuntimeError("QQP loader requires either Kaggle dataset or `datasets` library.")
 
-    # Split train/val
-    rng = random.Random(42)
-    idx = list(range(len(texts)))
-    rng.shuffle(idx)
-    
-    val_idx = set(idx[:val_split])
-    train_texts, train_labels, val_texts, val_labels = [], [], [], []
-    for i in idx:
-        if i in val_idx:
-            val_texts.append(texts[i])
-            val_labels.append(labels[i])
-        else:
-            train_texts.append(texts[i])
-            train_labels.append(labels[i])
+    train_ratio = 1 - val_split / len(texts)
+    train_idx, val_idx = split_indices(len(texts), train_ratio=train_ratio, seed=42)
+
+    train_texts = [texts[i] for i in train_idx]
+    train_labels = [labels[i] for i in train_idx]
+    val_texts = [texts[i] for i in val_idx]
+    val_labels = [labels[i] for i in val_idx]
 
     word2idx = _build_vocab(train_texts, vocab_size)
     train_ids = _texts_to_tensor(train_texts, word2idx, seq_len, shuffle_train)
@@ -243,20 +223,13 @@ def load_qnli(
     texts = [f"{ex['question']} {ex['sentence']}" for ex in train_data]
     labels = [ex["label"] for ex in train_data]
 
-    # Split train/val
-    rng = random.Random(42)
-    idx = list(range(len(texts)))
-    rng.shuffle(idx)
-    
-    val_idx = set(idx[:val_split])
-    train_texts, train_labels, val_texts, val_labels = [], [], [], []
-    for i in idx:
-        if i in val_idx:
-            val_texts.append(texts[i])
-            val_labels.append(labels[i])
-        else:
-            train_texts.append(texts[i])
-            train_labels.append(labels[i])
+    train_ratio = 1 - val_split / len(texts)
+    train_idx, val_idx = split_indices(len(texts), train_ratio=train_ratio, seed=42)
+
+    train_texts = [texts[i] for i in train_idx]
+    train_labels = [labels[i] for i in train_idx]
+    val_texts = [texts[i] for i in val_idx]
+    val_labels = [labels[i] for i in val_idx]
 
     word2idx = _build_vocab(train_texts, vocab_size)
     train_ids = _texts_to_tensor(train_texts, word2idx, seq_len, shuffle_train)
@@ -287,22 +260,14 @@ def load_rte(
     texts = [f"{ex['sentence1']} [SEP] {ex['sentence2']}" for ex in train_data]
     labels = [ex["label"] for ex in train_data]
 
-    # Split train/val with better validation split
-    rng = random.Random(42)
-    idx = list(range(len(texts)))
-    rng.shuffle(idx)
-    
-    # Use larger validation split for more reliable metrics
-    val_split = max(val_split, int(0.1 * len(texts)))
-    val_idx = set(idx[:val_split])
-    train_texts, train_labels, val_texts, val_labels = [], [], [], []
-    for i in idx:
-        if i in val_idx:
-            val_texts.append(texts[i])
-            val_labels.append(labels[i])
-        else:
-            train_texts.append(texts[i])
-            train_labels.append(labels[i])
+    val_count = max(val_split, int(0.1 * len(texts)))
+    train_ratio = 1 - val_count / len(texts)
+    train_idx, val_idx = split_indices(len(texts), train_ratio=train_ratio, seed=42)
+
+    train_texts = [texts[i] for i in train_idx]
+    train_labels = [labels[i] for i in train_idx]
+    val_texts = [texts[i] for i in val_idx]
+    val_labels = [labels[i] for i in val_idx]
 
     print(f"📊 RTE split: {len(train_texts)} train, {len(val_texts)} validation")
     
@@ -338,22 +303,14 @@ def load_cola(
     texts = [ex["sentence"] for ex in train_data]
     labels = [ex["label"] for ex in train_data]
 
-    # Split train/val with better validation split
-    rng = random.Random(42)
-    idx = list(range(len(texts)))
-    rng.shuffle(idx)
-    
-    # Use larger validation split for more reliable metrics
-    val_split = max(val_split, int(0.1 * len(texts)))
-    val_idx = set(idx[:val_split])
-    train_texts, train_labels, val_texts, val_labels = [], [], [], []
-    for i in idx:
-        if i in val_idx:
-            val_texts.append(texts[i])
-            val_labels.append(labels[i])
-        else:
-            train_texts.append(texts[i])
-            train_labels.append(labels[i])
+    val_count = max(val_split, int(0.1 * len(texts)))
+    train_ratio = 1 - val_count / len(texts)
+    train_idx, val_idx = split_indices(len(texts), train_ratio=train_ratio, seed=42)
+
+    train_texts = [texts[i] for i in train_idx]
+    train_labels = [labels[i] for i in train_idx]
+    val_texts = [texts[i] for i in val_idx]
+    val_labels = [labels[i] for i in val_idx]
 
     print(f"📊 CoLA split: {len(train_texts)} train, {len(val_texts)} validation")
     
@@ -386,20 +343,13 @@ def load_stsb(
     texts = [f"{ex['sentence1']} {ex['sentence2']}" for ex in train_data]
     labels = [ex["label"] for ex in train_data]
 
-    # Split train/val
-    rng = random.Random(42)
-    idx = list(range(len(texts)))
-    rng.shuffle(idx)
-    
-    val_idx = set(idx[:val_split])
-    train_texts, train_labels, val_texts, val_labels = [], [], [], []
-    for i in idx:
-        if i in val_idx:
-            val_texts.append(texts[i])
-            val_labels.append(labels[i])
-        else:
-            train_texts.append(texts[i])
-            train_labels.append(labels[i])
+    train_ratio = 1 - val_split / len(texts)
+    train_idx, val_idx = split_indices(len(texts), train_ratio=train_ratio, seed=42)
+
+    train_texts = [texts[i] for i in train_idx]
+    train_labels = [labels[i] for i in train_idx]
+    val_texts = [texts[i] for i in val_idx]
+    val_labels = [labels[i] for i in val_idx]
 
     word2idx = _build_vocab(train_texts, vocab_size)
     train_ids = _texts_to_tensor(train_texts, word2idx, seq_len, shuffle_train)
@@ -427,20 +377,13 @@ def load_wnli(
     texts = [f"{ex['sentence1']} {ex['sentence2']}" for ex in train_data]
     labels = [ex["label"] for ex in train_data]
 
-    # Split train/val
-    rng = random.Random(42)
-    idx = list(range(len(texts)))
-    rng.shuffle(idx)
-    
-    val_idx = set(idx[:val_split])
-    train_texts, train_labels, val_texts, val_labels = [], [], [], []
-    for i in idx:
-        if i in val_idx:
-            val_texts.append(texts[i])
-            val_labels.append(labels[i])
-        else:
-            train_texts.append(texts[i])
-            train_labels.append(labels[i])
+    train_ratio = 1 - val_split / len(texts)
+    train_idx, val_idx = split_indices(len(texts), train_ratio=train_ratio, seed=42)
+
+    train_texts = [texts[i] for i in train_idx]
+    train_labels = [labels[i] for i in train_idx]
+    val_texts = [texts[i] for i in val_idx]
+    val_labels = [labels[i] for i in val_idx]
 
     word2idx = _build_vocab(train_texts, vocab_size)
     train_ids = _texts_to_tensor(train_texts, word2idx, seq_len, shuffle_train)

@@ -69,20 +69,15 @@ def load_yelp_full(
         texts = [ex["text"] for ex in data]
         labels = [ex["label"] for ex in data]
 
-    val_size = int(len(texts) * val_ratio)
-    random.seed(42)
-    idx = list(range(len(texts)))
-    random.shuffle(idx)
-    val_idx = set(idx[:val_size])
+    # ------------------ split via utils.data_utils --------------------
+    from tfn.utils.data_utils import split_dataset
 
-    train_texts, val_texts, train_labels, val_labels = [], [], [], []
-    for i, (t, l) in enumerate(zip(texts, labels)):
-        if i in val_idx:
-            val_texts.append(t)
-            val_labels.append(l)
-        else:
-            train_texts.append(t)
-            train_labels.append(l)
+    # Create list datasets to leverage generic splitter
+    temp_dataset = list(zip(texts, labels))
+    train_idx, val_idx = split_dataset(temp_dataset, train_ratio=1 - val_ratio)
+
+    train_texts, train_labels = zip(*[temp_dataset[i] for i in train_idx])
+    val_texts, val_labels = zip(*[temp_dataset[i] for i in val_idx])
 
     word2idx = build_vocab(train_texts, vocab_size)
 

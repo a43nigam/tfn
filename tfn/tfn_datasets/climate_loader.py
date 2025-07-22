@@ -7,6 +7,7 @@ Climate and time series dataset loaders with Kaggle dataset support.
 from typing import List, Tuple, Dict
 import random
 from pathlib import Path
+from tfn.utils.data_utils import split_indices
 
 import torch
 from torch.utils.data import TensorDataset
@@ -105,20 +106,12 @@ def load_electricity_transformer(
     # Create sequences
     sequences, targets = _create_sequences(data, seq_len, step)
     
-    # Split train/val
-    rng = random.Random(42)
-    idx = list(range(len(sequences)))
-    rng.shuffle(idx)
-    
-    val_idx = set(idx[:val_split])
-    train_sequences, train_targets, val_sequences, val_targets = [], [], [], []
-    for i in idx:
-        if i in val_idx:
-            val_sequences.append(sequences[i])
-            val_targets.append(targets[i])
-        else:
-            train_sequences.append(sequences[i])
-            train_targets.append(targets[i])
+    train_ratio = 1 - val_split / len(sequences)
+    train_idx, val_idx = split_indices(len(sequences), train_ratio=train_ratio, seed=42)
+    train_sequences = [sequences[i] for i in train_idx]
+    train_targets = [targets[i] for i in train_idx]
+    val_sequences = [sequences[i] for i in val_idx]
+    val_targets = [targets[i] for i in val_idx]
 
     # Convert to tensors
     train_seq_tensor, train_target_tensor = _sequences_to_tensor(train_sequences, train_targets)
@@ -181,20 +174,12 @@ def load_jena_climate(
     # Create sequences
     sequences, targets = _create_sequences(data, seq_len, step)
     
-    # Split train/val
-    rng = random.Random(42)
-    idx = list(range(len(sequences)))
-    rng.shuffle(idx)
-    
-    val_idx = set(idx[:val_split])
-    train_sequences, train_targets, val_sequences, val_targets = [], [], [], []
-    for i in idx:
-        if i in val_idx:
-            val_sequences.append(sequences[i])
-            val_targets.append(targets[i])
-        else:
-            train_sequences.append(sequences[i])
-            train_targets.append(targets[i])
+    train_ratio = 1 - val_split / len(sequences)
+    train_idx, val_idx = split_indices(len(sequences), train_ratio=train_ratio, seed=42)
+    train_sequences = [sequences[i] for i in train_idx]
+    train_targets = [targets[i] for i in train_idx]
+    val_sequences = [sequences[i] for i in val_idx]
+    val_targets = [targets[i] for i in val_idx]
 
     # Convert to tensors
     train_seq_tensor, train_target_tensor = _sequences_to_tensor(train_sequences, train_targets)
@@ -297,19 +282,12 @@ def load_jena_climate_multi(
         targets.append(target)
     
     # Split train/val
-    rng = random.Random(42)
-    idx = list(range(len(sequences)))
-    rng.shuffle(idx)
-    
-    val_idx = set(idx[:val_split])
-    train_sequences, train_targets, val_sequences, val_targets = [], [], [], []
-    for i in idx:
-        if i in val_idx:
-            val_sequences.append(sequences[i])
-            val_targets.append(targets[i])
-        else:
-            train_sequences.append(sequences[i])
-            train_targets.append(targets[i])
+    train_ratio = 1 - val_split / len(sequences)
+    train_idx, val_idx = split_indices(len(sequences), train_ratio=train_ratio, seed=42)
+    train_sequences = [sequences[i] for i in train_idx]
+    train_targets = [targets[i] for i in train_idx]
+    val_sequences = [sequences[i] for i in val_idx]
+    val_targets = [targets[i] for i in val_idx]
 
     # Convert to tensors
     train_seq_tensor = torch.tensor(train_sequences, dtype=torch.float)
