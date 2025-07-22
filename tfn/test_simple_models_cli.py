@@ -1,7 +1,6 @@
-#!/usr/bin/env python3
 """
-Simple models test script with command line flags.
-Run with: python test_simple_models_cli.py [options]
+Simple models test script (library version).
+This file is intended to be run via run_comprehensive_tests.py, not as a standalone CLI.
 """
 
 import sys
@@ -133,48 +132,4 @@ def test_simple_models(args):
         
     except Exception as e:
         print(f"✗ Simple models test failed: {e}")
-        return {"error": str(e)}
-
-def main():
-    """Main test function with command line arguments."""
-    parser = argparse.ArgumentParser(description="Simple Models Test")
-    
-    # Model parameters
-    parser.add_argument("--seq-len", type=int, help="Specific sequence length to test")
-    parser.add_argument("--batch-size", type=int, default=2, help="Batch size")
-    parser.add_argument("--embed-dim", type=int, default=64, help="Embedding dimension")
-    parser.add_argument("--num-layers", type=int, default=2, help="Number of layers")
-    parser.add_argument("--vocab-size", type=int, default=1000, help="Vocabulary size")
-    parser.add_argument("--model-type", choices=["tfn", "transformer", "performer"], 
-                       help="Specific model type to test")
-    
-    # Output
-    parser.add_argument("--output", type=str, default="simple_models_test_results.json",
-                       help="Output file for results")
-    parser.add_argument("--verbose", action="store_true", help="Verbose output")
-    
-    args = parser.parse_args()
-    
-    print("=" * 50)
-    print("SIMPLE MODELS TEST")
-    print("=" * 50)
-    
-    if args.verbose:
-        print(f"Sequence Length: {args.seq_len or 'all'}")
-        print(f"Batch Size: {args.batch_size}")
-        print(f"Embedding Dimension: {args.embed_dim}")
-        print(f"Number of Layers: {args.num_layers}")
-        print(f"Vocabulary Size: {args.vocab_size}")
-        print(f"Model Type: {args.model_type or 'all'}")
-    
-    results = test_simple_models(args)
-    
-    # Save results
-    with open(args.output, "w") as f:
-        json.dump(results, f, indent=2, default=str)
-    
-    print(f"\nResults saved to: {args.output}")
-    print("Simple models test completed!")
-
-if __name__ == "__main__":
-    main() 
+        return {"error": str(e)} 
