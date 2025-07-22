@@ -1,4 +1,5 @@
 import random
+
 from pathlib import Path
 from typing import List, Tuple, Dict
 
@@ -6,26 +7,19 @@ import torch
 from torch.utils.data import TensorDataset
 
 # -----------------------------------------------------------------------------
-# Tokenisation utilities
+# Central tokenisation utils ---------------------------------------------------
 # -----------------------------------------------------------------------------
 
-def _tokenise(text: str) -> List[str]:
-    import re
-    return re.findall(r"\b\w+\b", text.lower())
+from tfn.data import tokenization as _tok
+
+# Provide thin wrapper aliases so downstream code remains unchanged ----------
+
+def _tokenise(text: str, tokenizer=None):
+    return _tok.tokenize(text, tokenizer)
 
 
-def build_vocab(texts: List[str], vocab_size: int = 10000) -> Dict[str, int]:
-    """Return word→idx mapping with <PAD>=0, <UNK>=1."""
-    from collections import Counter
-
-    counter = Counter()
-    for t in texts:
-        counter.update(_tokenise(t))
-
-    vocab = {"<PAD>": 0, "<UNK>": 1}
-    for word, _ in counter.most_common(vocab_size - 2):
-        vocab[word] = len(vocab)
-    return vocab
+def build_vocab(texts: List[str], vocab_size: int = 10000, tokenizer=None):
+    return _tok.build_vocab(texts, vocab_size, tokenizer)
 
 
 def texts_to_tensor(
@@ -33,16 +27,9 @@ def texts_to_tensor(
     word2idx: Dict[str, int],
     seq_len: int = 128,
     shuffle: bool = False,
-) -> torch.Tensor:
-    ids = []
-    for t in texts:
-        tokens = _tokenise(t)
-        if shuffle:
-            random.shuffle(tokens)
-        seq = [word2idx.get(tok, 1) for tok in tokens][:seq_len]
-        seq += [0] * (seq_len - len(seq))
-        ids.append(seq)
-    return torch.tensor(ids, dtype=torch.long)
+    tokenizer=None,
+):
+    return _tok.texts_to_tensor(texts, word2idx, seq_len=seq_len, shuffle_tokens=shuffle, tokenizer=tokenizer)
 
 # -----------------------------------------------------------------------------
 # Dataset-specific loaders
@@ -57,8 +44,7 @@ def load_agnews(*args, **kwargs):
 
 
 def _load_hf(dataset_name: str, split: str):
-    from datasets import load_dataset  # type: ignore
-    return load_dataset(dataset_name, split=split)
+    return _tok.load_hf_dataset(dataset_name, split=split)
 
 
 def load_yelp_full(

@@ -11,90 +11,26 @@ from pathlib import Path
 import torch
 from torch.utils.data import TensorDataset
 
-# Optional dependencies ---------------------------------------------------------
-try:
-    from datasets import load_dataset  # type: ignore
-    _HAVE_HF = True
-except ImportError:
-    _HAVE_HF = False
-
-try:
-    from transformers import AutoTokenizer, BertTokenizer
-    _HAVE_TOKENIZERS = True
-except ImportError:
-    _HAVE_TOKENIZERS = False
-
-# Fallback: try nltk for basic tokenization
-try:
-    import nltk
-    from nltk.tokenize import word_tokenize
-    # Download required data if not present
-    try:
-        nltk.data.find('tokenizers/punkt')
-    except LookupError:
-        nltk.download('punkt', quiet=True)
-    _HAVE_NLTK = True
-except ImportError:
-    _HAVE_NLTK = False
-
 # ---------------------------------------------------------------------------
-# Tokenisation helpers with proper tokenizers
+# Central tokenisation utilities --------------------------------------------
 # ---------------------------------------------------------------------------
+
+from tfn.data import tokenization as _tok
+
+# Alias helpers so the rest of this file stays unchanged --------------------
 
 def _get_tokenizer():
-    """Get the best available tokenizer."""
-    if _HAVE_TOKENIZERS:
-        try:
-            # Use DistilBERT tokenizer (smaller, faster than BERT)
-            return AutoTokenizer.from_pretrained('distilbert-base-uncased')
-        except:
-            try:
-                # Fallback to basic BERT tokenizer
-                return BertTokenizer.from_pretrained('bert-base-uncased')
-            except:
-                pass
-    
-    # If transformers tokenizers fail, return None to use fallback
-    return None
+    """Return the default tokenizer from `tfn.data.tokenization`."""
+    return _tok.get_tokenizer()
 
-def _tokenise(text: str, tokenizer=None) -> List[str]:
-    """Tokenize text using the best available method."""
-    if tokenizer is not None:
-        # Use transformers tokenizer
-        tokens = tokenizer.tokenize(text.lower())
-        return tokens
-    elif _HAVE_NLTK:
-        # Use NLTK tokenizer
-        tokens = word_tokenize(text.lower())
-        return tokens
-    else:
-        # Last resort: simple regex (original approach)
-        import re
-        return re.findall(r"\b\w+\b", text.lower())
 
-def _build_vocab(texts: List[str], vocab_size: int = 10000, tokenizer=None) -> Dict[str, int]:
-    """Build vocabulary using proper tokenization."""
-    from collections import Counter
+def _tokenise(text: str, tokenizer=None):
+    return _tok.tokenize(text, tokenizer)
 
-    counter = Counter()
-    for text in texts:
-        tokens = _tokenise(text, tokenizer)
-        counter.update(tokens)
 
-    # Standard special tokens
-    vocab = {
-        "<PAD>": 0, 
-        "<UNK>": 1, 
-        "[CLS]": 2, 
-        "[SEP]": 3,
-        "[MASK]": 4
-    }
-    
-    # Add most common tokens
-    for word, _ in counter.most_common(vocab_size - len(vocab)):
-        vocab[word] = len(vocab)
-    
-    return vocab
+def _build_vocab(texts: List[str], vocab_size: int = 10000, tokenizer=None):
+    return _tok.build_vocab(texts, vocab_size, tokenizer)
+
 
 def _texts_to_tensor(
     texts: List[str],
@@ -102,33 +38,8 @@ def _texts_to_tensor(
     seq_len: int = 128,
     shuffle: bool = False,
     tokenizer=None,
-) -> torch.Tensor:
-    """Convert texts to tensor using proper tokenization."""
-    ids: List[List[int]] = []
-    
-    for text in texts:
-        tokens = _tokenise(text, tokenizer)
-        if shuffle:
-            import random
-            random.shuffle(tokens)
-        
-        # Convert tokens to IDs
-        token_ids = [word2idx.get(token, word2idx["<UNK>"]) for token in tokens]
-        
-        # Add [CLS] token at the beginning for BERT-style processing
-        if "[CLS]" in word2idx:
-            token_ids = [word2idx["[CLS]"]] + token_ids
-        
-        # Truncate or pad to seq_len
-        if len(token_ids) > seq_len:
-            token_ids = token_ids[:seq_len]
-        else:
-            # Pad with <PAD> tokens
-            token_ids += [word2idx["<PAD>"]] * (seq_len - len(token_ids))
-        
-        ids.append(token_ids)
-    
-    return torch.tensor(ids, dtype=torch.long)
+):
+    return _tok.texts_to_tensor(texts, word2idx, seq_len=seq_len, shuffle_tokens=shuffle, tokenizer=tokenizer)
 
 # ---------------------------------------------------------------------------
 # GLUE dataset loaders with improved tokenization
@@ -149,7 +60,7 @@ def load_sst2(
     tokenizer = _get_tokenizer()
     if tokenizer is not None:
         print(f"✅ Using {tokenizer.__class__.__name__} tokenizer")
-    elif _HAVE_NLTK:
+    elif _tok.has_nltk():
         print("✅ Using NLTK tokenizer")
     else:
         print("⚠️  Using basic regex tokenizer (fallback)")
@@ -160,8 +71,8 @@ def load_sst2(
         df = pd.read_csv(kaggle_path, sep='\t')
         texts = df['Phrase'].astype(str).tolist()
         labels = df['Sentiment'].tolist()
-    elif _HAVE_HF:
-        train_data = load_dataset("glue", "sst2", split="train")
+    elif _tok.has_hf():
+        train_data = _tok.load_hf_dataset("glue", "sst2", split="train")
         texts = [ex["sentence"] for ex in train_data]
         labels = [ex["label"] for ex in train_data]
     else:
@@ -224,8 +135,8 @@ def load_mrpc(
             if len(row) >= 5:
                 texts.append(f"{row[3]} [SEP] {row[4]}")  # Add [SEP] token between sentences
                 labels.append(row[0])
-    elif _HAVE_HF:
-        train_data = load_dataset("glue", "mrpc", split="train")
+    elif _tok.has_hf():
+        train_data = _tok.load_hf_dataset("glue", "mrpc", split="train")
         texts = [f"{ex['sentence1']} [SEP] {ex['sentence2']}" for ex in train_data]
         labels = [ex["label"] for ex in train_data]
     else:
@@ -284,8 +195,8 @@ def load_qqp(
             if pd.notna(row['question1']) and pd.notna(row['question2']):
                 texts.append(f"{row['question1']} {row['question2']}")
                 labels.append(row['is_duplicate'])
-    elif _HAVE_HF:
-        train_data = load_dataset("glue", "qqp", split="train")
+    elif _tok.has_hf():
+        train_data = _tok.load_hf_dataset("glue", "qqp", split="train")
         texts = [f"{ex['question1']} {ex['question2']}" for ex in train_data]
         labels = [ex["label"] for ex in train_data]
     else:
@@ -325,10 +236,10 @@ def load_qnli(
     shuffle_eval: bool = False,
 ):
     """QNLI question-answer entailment (binary)."""
-    if not _HAVE_HF:
+    if not _tok.has_hf():
         raise RuntimeError("QNLI loader requires `datasets` library.")
     
-    train_data = load_dataset("glue", "qnli", split="train")
+    train_data = _tok.load_hf_dataset("glue", "qnli", split="train")
     texts = [f"{ex['question']} {ex['sentence']}" for ex in train_data]
     labels = [ex["label"] for ex in train_data]
 
@@ -366,13 +277,13 @@ def load_rte(
     shuffle_eval: bool = False,
 ):
     """RTE textual entailment (binary) with proper tokenization."""
-    if not _HAVE_HF:
+    if not _tok.has_hf():
         raise RuntimeError("RTE loader requires `datasets` library.")
     
     # Initialize tokenizer
     tokenizer = _get_tokenizer()
     
-    train_data = load_dataset("glue", "rte", split="train")
+    train_data = _tok.load_hf_dataset("glue", "rte", split="train")
     texts = [f"{ex['sentence1']} [SEP] {ex['sentence2']}" for ex in train_data]
     labels = [ex["label"] for ex in train_data]
 
@@ -417,13 +328,13 @@ def load_cola(
     shuffle_eval: bool = False,
 ):
     """CoLA linguistic acceptability (binary) with proper tokenization."""
-    if not _HAVE_HF:
+    if not _tok.has_hf():
         raise RuntimeError("CoLA loader requires `datasets` library.")
     
     # Initialize tokenizer
     tokenizer = _get_tokenizer()
     
-    train_data = load_dataset("glue", "cola", split="train")
+    train_data = _tok.load_hf_dataset("glue", "cola", split="train")
     texts = [ex["sentence"] for ex in train_data]
     labels = [ex["label"] for ex in train_data]
 
@@ -468,10 +379,10 @@ def load_stsb(
     shuffle_eval: bool = False,
 ):
     """STS-B semantic similarity (regression)."""
-    if not _HAVE_HF:
+    if not _tok.has_hf():
         raise RuntimeError("STS-B loader requires `datasets` library.")
     
-    train_data = load_dataset("glue", "stsb", split="train")
+    train_data = _tok.load_hf_dataset("glue", "stsb", split="train")
     texts = [f"{ex['sentence1']} {ex['sentence2']}" for ex in train_data]
     labels = [ex["label"] for ex in train_data]
 
@@ -509,10 +420,10 @@ def load_wnli(
     shuffle_eval: bool = False,
 ):
     """WNLI Winograd NLI (binary)."""
-    if not _HAVE_HF:
+    if not _tok.has_hf():
         raise RuntimeError("WNLI loader requires `datasets` library.")
     
-    train_data = load_dataset("glue", "wnli", split="train")
+    train_data = _tok.load_hf_dataset("glue", "wnli", split="train")
     texts = [f"{ex['sentence1']} {ex['sentence2']}" for ex in train_data]
     labels = [ex["label"] for ex in train_data]
 

@@ -14,33 +14,28 @@ from pathlib import Path
 import torch
 from torch.utils.data import TensorDataset
 
+# ---------------------------------------------------------------------------
+# Central tokenisation utils --------------------------------------------------
+# ---------------------------------------------------------------------------
+
+from tfn.data import tokenization as _tok
+
 # Optional dependency ---------------------------------------------------------
-try:
-    from datasets import load_dataset  # type: ignore
-    _HAVE_HF = True
-except ImportError:
-    _HAVE_HF = False
+
+_HAVE_HF = _tok.has_hf()
+
 
 # ---------------------------------------------------------------------------
-# Tokenisation helpers (simple whitespace + punctuation split)
+# Thin wrappers so rest of file stays unchanged --------------------------------
 # ---------------------------------------------------------------------------
 
-def _tokenise(text: str) -> List[str]:
-    import re
-    return re.findall(r"\b\w+\b", text.lower())
+
+def _tokenise(text: str, tokenizer=None):
+    return _tok.tokenize(text, tokenizer)
 
 
-def _build_vocab(texts: List[str], vocab_size: int = 10000) -> Dict[str, int]:
-    from collections import Counter
-
-    counter = Counter()
-    for t in texts:
-        counter.update(_tokenise(t))
-
-    vocab = {"<PAD>": 0, "<UNK>": 1}
-    for word, _ in counter.most_common(vocab_size - 2):
-        vocab[word] = len(vocab)
-    return vocab
+def _build_vocab(texts: List[str], vocab_size: int = 10000, tokenizer=None):
+    return _tok.build_vocab(texts, vocab_size, tokenizer)
 
 
 def _texts_to_tensor(
@@ -48,16 +43,9 @@ def _texts_to_tensor(
     word2idx: Dict[str, int],
     seq_len: int = 128,
     shuffle: bool = False,
-) -> torch.Tensor:
-    ids: List[List[int]] = []
-    for t in texts:
-        tokens = _tokenise(t)
-        if shuffle:
-            random.shuffle(tokens)
-        seq = [word2idx.get(tok, 1) for tok in tokens][:seq_len]
-        seq += [0] * (seq_len - len(seq))
-        ids.append(seq)
-    return torch.tensor(ids, dtype=torch.long)
+    tokenizer=None,
+):
+    return _tok.texts_to_tensor(texts, word2idx, seq_len=seq_len, shuffle_tokens=shuffle, tokenizer=tokenizer)
 
 # ---------------------------------------------------------------------------
 # CSV fallback for AG-News (tiny helper)
@@ -96,7 +84,7 @@ def load_agnews(
     Returns `(train_ds, val_ds, vocab_size)`.
     """
     if _HAVE_HF:
-        train_hf = load_dataset("ag_news", split="train")
+        train_hf = _tok.load_hf_dataset("ag_news", split="train")
         texts = [ex["text"] for ex in train_hf]
         labels = [ex["label"] for ex in train_hf]
     else:
@@ -131,7 +119,7 @@ def load_agnews(
 def _load_yelp_full_raw() -> Tuple[List[str], List[int]]:
     if not _HAVE_HF:
         raise RuntimeError("Yelp Review Full loader requires `datasets` library.")
-    data = load_dataset("yelp_review_full", split="train")
+    data = _tok.load_hf_dataset("yelp_review_full", split="train")
     texts = [ex["text"] for ex in data]
     labels = [ex["label"] for ex in data]
     return texts, labels
@@ -177,7 +165,7 @@ def load_yelp_full(
 def _load_imdb_raw() -> Tuple[List[str], List[int]]:
     if not _HAVE_HF:
         raise RuntimeError("IMDB loader requires `datasets` library.")
-    data = load_dataset("imdb", split="train")
+    data = _tok.load_hf_dataset("imdb", split="train")
     texts = [ex["text"] for ex in data]
     labels = [ex["label"] for ex in data]
     return texts, labels

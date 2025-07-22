@@ -19,14 +19,14 @@ pip install torch datasets pandas numpy
 
 ### Basic Training Examples
 ```bash
-# Train TFN on AG News
-python -m tfn.scripts.text_benchmark_cli --dataset agnews --epochs 10
+# Train TFN on AG News (text classification)
+python -m tfn.scripts.train --task classification --dataset agnews --model tfn --epochs 10
 
 # Train TFN on SST-2 (GLUE)
-python -m tfn.scripts.train_glue_tfn --task sst2 --model tfn --epochs 10
+python -m tfn.scripts.train --task classification --dataset sst2 --model tfn --epochs 10
 
-# Train TFN on Electricity Transformer Temperature
-python -m tfn.scripts.train_climate_tfn --dataset electricity --model tfn --epochs 10
+# Train TFN on Electricity Transformer Temperature (time-series)
+python -m tfn.scripts.train --task time_series --dataset electricity --model tfn --epochs 10
 ```
 
 ## 📊 Available Datasets
@@ -80,7 +80,7 @@ python -m tfn.scripts.train_climate_tfn --dataset electricity --model tfn --epoc
 
 #### Basic Text Classification
 ```bash
-python -m tfn.scripts.text_benchmark_cli --dataset <dataset> [options]
+python -m tfn.scripts.train --task classification --dataset <dataset> --model tfn [options]
 ```
 
 **Parameters:**
@@ -105,61 +105,29 @@ python -m tfn.scripts.text_benchmark_cli --dataset <dataset> [options]
 **Examples:**
 ```bash
 # Train on AG News with default parameters
-python -m tfn.scripts.text_benchmark_cli --dataset agnews --epochs 10
+python -m tfn.scripts.train --task classification --dataset agnews --model tfn --epochs 10
 
 # Train on IMDB with custom parameters
-python -m tfn.scripts.text_benchmark_cli --dataset imdb --embed_dim 256 --num_layers 3 --batch_size 64 --epochs 20 --lr 3e-4
+python -m tfn.scripts.train --task classification --dataset imdb --model tfn \
+       --embed_dim 256 --num_layers 3 --batch_size 64 --epochs 20 --lr 3e-4
 
-# Train on Yelp with large model
-python -m tfn.scripts.text_benchmark_cli --dataset yelp_full --embed_dim 512 --num_layers 4 --seq_len 256 --epochs 15
+# Train on Yelp with larger model
+python -m tfn.scripts.train --task classification --dataset yelp_full --model tfn \
+       --embed_dim 512 --num_layers 4 --seq_len 256 --epochs 15
 ```
 
 ### GLUE Benchmark Training
 
-#### GLUE Tasks with Model Selection
+All GLUE tasks use the same unified CLI; simply specify the dataset key and model.
+
 ```bash
-python -m tfn.scripts.train_glue_tfn --task <task> --model <model> [options]
-```
+# General form
+python -m tfn.scripts.train --task classification --dataset <glue_task> --model <model> [options]
 
-**Parameters:**
-- `--task`: GLUE task (`sst2`, `mrpc`, `qqp`, `qnli`, `rte`, `cola`, `stsb`, `wnli`)
-- `--model`: Model architecture (`tfn`, `transformer`, `performer`, `lstm`, `cnn`) (default: `tfn`)
-- `--seq_len`: Sequence length (default: 128)
-- `--embed_dim`: Embedding dimension (default: 128)
-- `--num_layers`: Number of layers (default: 2)
-- `--kernel_type`: Kernel type for TFN (`rbf`, `compact`, `fourier`) (default: `rbf`)
-- `--evolution_type`: Evolution type for TFN (`cnn`, `spectral`, `pde`) (default: `cnn`)
-- `--grid_size`: Grid size for TFN (default: 64)
-- `--time_steps`: Time steps for TFN (default: 3)
-- `--dropout`: Dropout rate (default: 0.1)
-- `--batch_size`: Batch size (default: 32)
-- `--epochs`: Number of epochs (default: 10)
-- `--lr`: Learning rate (default: 1e-3)
-- `--weight_decay`: Weight decay (default: 1e-4)
-- `--device`: Device (`cuda`, `cpu`, `auto`) (default: `auto`)
-- `--num_workers`: DataLoader workers (default: 2)
-- `--save_dir`: Save directory (default: `outputs`)
-- `--tag`: Optional run tag
-
-**Examples:**
-```bash
-# Train TFN on SST-2
-python -m tfn.scripts.train_glue_tfn --task sst2 --model tfn --epochs 10
-
-# Train Transformer on MRPC
-python -m tfn.scripts.train_glue_tfn --task mrpc --model transformer --epochs 15
-
-# Train Performer on QQP with custom parameters
-python -m tfn.scripts.train_glue_tfn --task qqp --model performer --embed_dim 256 --num_layers 3 --batch_size 64 --epochs 20
-
-# Train LSTM on RTE
-python -m tfn.scripts.train_glue_tfn --task rte --model lstm --epochs 10
-
-# Train CNN on CoLA
-python -m tfn.scripts.train_glue_tfn --task cola --model cnn --epochs 10
-
-# Train TFN on STS-B (regression)
-python -m tfn.scripts.train_glue_tfn --task stsb --model tfn --epochs 10
+# Examples
+python -m tfn.scripts.train --task classification --dataset sst2 --model tfn --epochs 10
+python -m tfn.scripts.train --task classification --dataset mrpc --model transformer --epochs 15
+python -m tfn.scripts.train --task classification --dataset qqp --model performer --embed_dim 256 --num_layers 3 --epochs 20
 ```
 
 ### Climate/Time Series Training
@@ -266,6 +234,23 @@ python -m tfn.scripts.train_synthetic_seq [options]
 python -m tfn.scripts.train_cifar_tfn [options]
 python -m tfn.scripts.train_cifar_vit [options]
 ```
+
+## 🏁 Benchmarking
+
+Run multiple dataset / model configurations programmatically with the new benchmark driver:
+
+```bash
+# Quick 2-dataset sanity sweep
+python -m tfn.scripts.benchmark --preset quick
+
+# Full NLP benchmark (all GLUE + common text datasets)
+python -m tfn.scripts.benchmark --preset nlp_full
+
+# Time-series benchmark
+python -m tfn.scripts.benchmark --preset time_series
+```
+
+Results are written to `outputs/benchmark_<preset>.json`.
 
 ## 🔄 Model Comparison Examples
 

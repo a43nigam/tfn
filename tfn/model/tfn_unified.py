@@ -41,7 +41,7 @@ from .tfn_enhanced import EnhancedTFNLayer  # Optional future use
 TaskType = Literal["classification", "regression"]
 
 
-class UnifiedTFN(nn.Module):
+class TFN(nn.Module):
     """A unified TFN model configurable for classification or regression.
 
     Arguments
@@ -215,7 +215,7 @@ class UnifiedTFN(nn.Module):
         vocab_size: int,
         num_classes: int,
         **kwargs,
-    ) -> "UnifiedTFN":
+    ) -> "TFN":
         """Factory for classification task."""
         return cls(task="classification", vocab_size=vocab_size, num_classes=num_classes, **kwargs)
 
@@ -225,6 +225,12 @@ class UnifiedTFN(nn.Module):
         input_dim: int,
         output_dim: int = 1,
         **kwargs,
-    ) -> "UnifiedTFN":
+    ) -> "TFN":
         """Factory for regression task."""
         return cls(task="regression", input_dim=input_dim, output_dim=output_dim, **kwargs) 
+
+# ------------------------------------------------------------------
+# Backward-compatibility alias
+# ------------------------------------------------------------------
+
+UnifiedTFN = TFN 

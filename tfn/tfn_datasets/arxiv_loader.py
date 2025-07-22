@@ -12,32 +12,19 @@ import torch
 from torch.utils.data import TensorDataset
 
 # Optional dependency ---------------------------------------------------------
-try:
-    from datasets import load_dataset  # type: ignore
-    _HAVE_HF = True
-except ImportError:
-    _HAVE_HF = False
+from tfn.data import tokenization as _tok
 
 # ---------------------------------------------------------------------------
-# Tokenisation helpers (simple whitespace + punctuation split)
+# Tokenisation helpers (delegate to central util) ----------------------------
 # ---------------------------------------------------------------------------
 
-def _tokenise(text: str) -> List[str]:
-    import re
-    return re.findall(r"\b\w+\b", text.lower())
+
+def _tokenise(text: str, tokenizer=None):
+    return _tok.tokenize(text, tokenizer)
 
 
-def _build_vocab(texts: List[str], vocab_size: int = 20000) -> Dict[str, int]:
-    from collections import Counter
-
-    counter = Counter()
-    for t in texts:
-        counter.update(_tokenise(t))
-
-    vocab = {"<PAD>": 0, "<UNK>": 1}
-    for word, _ in counter.most_common(vocab_size - 2):
-        vocab[word] = len(vocab)
-    return vocab
+def _build_vocab(texts: List[str], vocab_size: int = 20000, tokenizer=None):
+    return _tok.build_vocab(texts, vocab_size, tokenizer)
 
 
 def _texts_to_tensor(
@@ -45,16 +32,12 @@ def _texts_to_tensor(
     word2idx: Dict[str, int],
     seq_len: int = 512,
     shuffle: bool = False,
-) -> torch.Tensor:
-    ids: List[List[int]] = []
-    for t in texts:
-        tokens = _tokenise(t)
-        if shuffle:
-            random.shuffle(tokens)
-        seq = [word2idx.get(tok, 1) for tok in tokens][:seq_len]
-        seq += [0] * (seq_len - len(seq))
-        ids.append(seq)
-    return torch.tensor(ids, dtype=torch.long)
+    tokenizer=None,
+):
+    return _tok.texts_to_tensor(texts, word2idx, seq_len=seq_len, shuffle_tokens=shuffle, tokenizer=tokenizer)
+
+# HF datasets optional
+_HAVE_HF = _tok.has_hf()
 
 
 def _build_label_mapping(labels: List[str]) -> Tuple[Dict[str, int], List[int]]:
@@ -90,7 +73,7 @@ def load_arxiv(
                 texts.append(text)
                 labels.append(category)
     elif _HAVE_HF:
-        train_data = load_dataset("arxiv_dataset", split="train")
+        train_data = _tok.load_hf_dataset("arxiv_dataset", split="train")
         texts = []
         labels = []
         for ex in train_data:
