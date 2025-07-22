@@ -1,9 +1,9 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from tfn.core.field_emitter import ImageFieldEmitter
-from tfn.core.field_interference_block import ImageFieldInterference
-from tfn.core.field_propagator import ImageFieldPropagator
+from tfn.core.image.field_emitter import ImageFieldEmitter
+from tfn.core.image.field_interference_block import ImageFieldInterference
+from tfn.core.image.field_propagator import ImageFieldPropagator
 
 class ImageTFN(nn.Module):
     """
