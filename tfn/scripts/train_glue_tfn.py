@@ -37,12 +37,16 @@ import torch.nn as nn
 from torch.utils.data import DataLoader, TensorDataset
 
 # Local imports
-from tfn.model.tfn_classifiers import TFNClassifier
 from tfn.model.tfn_enhanced import create_enhanced_tfn_model
 from tfn.model.baseline_classifiers import (
     TransformerClassifier, PerformerClassifier, LSTMClassifier, CNNClassifier
 )
 import tfn.tfn_datasets.glue_loader as gl
+
+# Kernel/evolution validator
+from tfn.model.registry import validate_kernel_evolution
+
+from tfn.model.tfn_classifiers import TFNClassifier
 
 # -----------------------------------------------------------------------------
 # Utility functions
@@ -210,7 +214,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--kernel_type", type=str, default="rbf",
                    choices=["rbf", "compact", "fourier"])
     p.add_argument("--evolution_type", type=str, default="cnn",
-                   choices=["cnn", "spectral", "pde"])
+                   choices=["cnn", "pde"])
     p.add_argument("--grid_size", type=int, default=64)
     p.add_argument("--time_steps", type=int, default=3)
     p.add_argument("--dropout", type=float, default=0.1)
@@ -242,6 +246,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--device", type=str, default="auto",
                    help="cuda | cpu | auto")
     p.add_argument("--num_workers", type=int, default=2)
+    p.add_argument('--seed', type=int, default=42, help='Random seed for reproducibility')
 
     # I/O
     p.add_argument("--save_dir", type=str, default="outputs",
@@ -254,6 +259,20 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
+
+    # Set all random seeds for reproducibility
+    import random, numpy as np, torch
+    random.seed(args.seed)
+    np.random.seed(args.seed)
+    torch.manual_seed(args.seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(args.seed)
+
+    try:
+        validate_kernel_evolution(args.kernel_type, args.evolution_type)
+    except ValueError as e:
+        print(f"[ConfigError] {e}");
+        return
 
     device = _prepare_device(args.device)
 
@@ -273,6 +292,7 @@ def main() -> None:
             grid_size=args.grid_size,
             time_steps=args.time_steps,
             dropout=args.dropout,
+            task="regression" if args.task == "stsb" else "classification"
         )
     elif args.model == "transformer":
         model = TransformerClassifier(

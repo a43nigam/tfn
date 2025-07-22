@@ -1,6 +1,14 @@
 # Token Field Network (TFN) Training Guide
 
-This repository contains a comprehensive implementation of Token Field Networks (TFN) with support for multiple datasets and model architectures. TFN replaces attention with continuous field projection, evolution, and sampling.
+This repository contains a **streamlined** implementation of Token Field Networks (TFN).
+
+• **UnifiedTFN** – a single, fully-parameterised PyTorch module that covers *all* 1-D sequence use-cases (classification, regression, time-series) via a simple `task` flag.
+• **ImageTFN** – the dedicated 2-D / image variant.
+• **EnhancedTFN** – an optional research variant that augments UnifiedTFN with *field interference*, *dynamic propagation*, and *physics-inspired* constraints. Enable via `--model enhanced_tfn_classifier` (classification) or by passing `use_enhanced=True` to `UnifiedTFN`.
+
+Legacy wrappers such as `TFNClassifier`, `TFNRegressor`, and `tfn.model.tfn_2d.*` remain as *thin aliases* for backward compatibility but will be removed in a future release.
+
+TFN replaces attention with continuous field projection, evolution, and sampling; the new unified design eliminates code duplication while preserving full CLI configurability.
 
 ## 🚀 Quick Start
 
@@ -52,7 +60,8 @@ python -m tfn.scripts.train_climate_tfn --dataset electricity --model tfn --epoc
 ## 🤖 Available Models
 
 ### Classification Models
-- **TFN**: Token Field Network (our novel architecture)
+- **TFN (Unified)**: Standard Token Field Network
+- **Enhanced TFN**: Field-interference variant (`enhanced_tfn_classifier`)
 - **Transformer**: Standard Transformer encoder
 - **Performer**: Linear attention approximation
 - **LSTM**: LSTM-based classifier

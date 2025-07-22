@@ -18,8 +18,8 @@ import os
 # Add parent directory to path for imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from model import TFNClassifier, TFNRegressor
-from tfn.model.tfn_enhanced import create_enhanced_tfn_model
+from tfn.model.tfn_unified import UnifiedTFN
+from tfn.model.tfn_enhanced import create_enhanced_tfn_model  # For legacy enhanced path
 from utils.data_utils import (
     create_synthetic_data, create_synthetic_regression_data,
     TextClassificationDataset, SequenceRegressionDataset,
@@ -28,6 +28,10 @@ from utils.data_utils import (
 )
 from utils.metrics import evaluate_model, print_metrics
 from utils.plot_utils import plot_training_curves
+
+# Dataset registry & compatibility guard
+from tfn.tfn_datasets.registry import get_dataset
+from tfn.model.registry import validate_kernel_evolution
 
 
 def parse_args():
@@ -46,7 +50,7 @@ def parse_args():
                        choices=['rbf', 'compact', 'fourier'],
                        help='Kernel type')
     parser.add_argument('--evolution_type', type=str, default='cnn',
-                       choices=['cnn', 'spectral', 'pde'],
+                       choices=['cnn', 'pde'],
                        help='Evolution type')
     parser.add_argument('--grid_size', type=int, default=100,
                        help='Grid size for field')
@@ -75,9 +79,8 @@ def parse_args():
                        help='Weight for physics constraint loss')
     
     # Data arguments
-    parser.add_argument('--data', type=str, default='synthetic',
-                       choices=['synthetic'],
-                       help='Dataset type')
+    parser.add_argument('--dataset', type=str, default='synthetic_copy',
+                       help='Dataset key (see tfn/tfn_datasets/registry.py) or "synthetic" for legacy synthetic text')
     parser.add_argument('--num_samples', type=int, default=1000,
                        help='Number of training samples')
     parser.add_argument('--seq_len', type=int, default=50,
@@ -112,31 +115,35 @@ def setup_device(device_arg: str) -> torch.device:
 
 
 def create_model(args, device: torch.device):
-    """Create model based on arguments."""
+    """Create model based on arguments using UnifiedTFN."""
     if args.model == 'tfn_classifier':
-        # For synthetic data
-        vocab_size = 1000
-        num_classes = 3
-        
-        model = TFNClassifier(
-            vocab_size=vocab_size,
+        model = UnifiedTFN.for_classification(
+            vocab_size=args.embed_dim * 2,  # dummy vocab for synthetic
+            num_classes=2,
             embed_dim=args.embed_dim,
-            num_classes=num_classes,
             num_layers=args.num_layers,
             kernel_type=args.kernel_type,
             evolution_type=args.evolution_type,
             grid_size=args.grid_size,
             time_steps=args.time_steps,
-            dropout=args.dropout
+            dropout=args.dropout,
         )
-        
+    elif args.model == 'tfn_regressor':
+        model = UnifiedTFN.for_regression(
+            input_dim=1,
+            output_dim=1,
+            embed_dim=args.embed_dim,
+            num_layers=args.num_layers,
+            kernel_type=args.kernel_type,
+            evolution_type=args.evolution_type,
+            grid_size=args.grid_size,
+            time_steps=args.time_steps,
+            dropout=args.dropout,
+        )
     elif args.model == 'enhanced_tfn_classifier':
-        # For synthetic data
-        vocab_size = 1000
-        num_classes = 3
-        
+        # Keep using specialized enhanced model for now
         model = create_enhanced_tfn_model(
-            vocab_size=vocab_size,
+            vocab_size=args.embed_dim * 2,  # dummy vocab for synthetic
             embed_dim=args.embed_dim,
             num_layers=args.num_layers,
             pos_dim=args.pos_dim,
@@ -148,41 +155,31 @@ def create_model(args, device: torch.device):
             grid_size=args.grid_size,
             num_heads=args.num_heads,
             dropout=args.dropout,
-            max_seq_len=args.seq_len
         )
-        
-    elif args.model == 'tfn_regressor':
-        input_dim = 32
-        output_dim = 8
-        
-        model = TFNRegressor(
-            input_dim=input_dim,
+    elif args.model == 'enhanced_tfn_regressor':
+        # Enhanced regression via UnifiedTFN with enhanced layers
+        model = UnifiedTFN.for_regression(
+            input_dim=1,
+            output_dim=1,
             embed_dim=args.embed_dim,
-            output_dim=output_dim,
             num_layers=args.num_layers,
             kernel_type=args.kernel_type,
             evolution_type=args.evolution_type,
             grid_size=args.grid_size,
             time_steps=args.time_steps,
-            dropout=args.dropout
+            dropout=args.dropout,
+            use_enhanced=True,
         )
-        
-    elif args.model == 'enhanced_tfn_regressor':
-        input_dim = 32
-        output_dim = 8
-        
-        # For Enhanced TFN regressor, we need to create a custom model
-        # since the base Enhanced TFN is designed for classification
-        # This would require a custom implementation
-        raise NotImplementedError("Enhanced TFN regressor not yet implemented")
-    
-    model = model.to(device)
+    else:
+        raise ValueError(f"Unknown model type: {args.model}")
+
+    model.to(device)
     return model
 
 
 def create_data(args):
     """Create training and validation data."""
-    if args.data == 'synthetic':
+    if args.dataset == 'synthetic':
         if args.model in ['tfn_classifier', 'enhanced_tfn_classifier']:
             # Create synthetic text classification data
             train_texts, train_labels = create_synthetic_data(
@@ -245,6 +242,22 @@ def create_data(args):
             )
             
             return train_loader, val_loader, 'regression', None
+    else:
+        # Use central dataset registry – expects it to return train & val tensors or DataLoaders
+        train_ds, val_ds, _meta = get_dataset(
+            args.dataset,
+            seq_len=args.seq_len,
+            batch_size=args.batch_size,
+            vocab_size=1000,
+        )
+
+        # If loaders are returned already, just propagate; else wrap in loader
+        if isinstance(train_ds, DataLoader):
+            return train_ds, val_ds, _meta
+
+        train_loader = DataLoader(train_ds, batch_size=args.batch_size, shuffle=True)
+        val_loader = DataLoader(val_ds, batch_size=args.batch_size, shuffle=False)
+        return train_loader, val_loader, _meta
 
 
 def train_epoch(model, train_loader, optimizer, criterion, device, task_type, log_interval, 
@@ -293,6 +306,13 @@ def main():
     """Main training function."""
     args = parse_args()
     
+    # Validate kernel/evolution combo early to fail-fast
+    try:
+        validate_kernel_evolution(args.kernel_type, args.evolution_type)
+    except ValueError as e:
+        print(f"[ConfigError] {e}");
+        return
+
     # Setup device
     device = setup_device(args.device)
     

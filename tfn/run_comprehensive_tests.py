@@ -53,16 +53,16 @@ def run_basic_imports_test():
     print(f"{'='*50}")
     
     try:
-        from core.grid_utils import compute_auto_grid_size
-        print("✓ Grid utils import successful")
-        
-        from tfn_datasets.physics_loader import create_physics_dataloader
+        from tfn.tfn_datasets.physics_loader import create_physics_dataloader
         print("✓ Physics loader import successful")
         
-        from model.tfn_base import TrainableTFNLayer
+        from tfn.core.grid_utils import compute_auto_grid_size
+        print("✓ Grid utils import successful")
+        
+        from tfn.model.tfn_base import TrainableTFNLayer
         print("✓ TFN model import successful")
         
-        from model.seq_baselines import SimpleTransformerSeqModel
+        from tfn.model.seq_baselines import SimpleTransformerSeqModel
         print("✓ Baseline models import successful")
         
         print("✓ All basic imports successful!")

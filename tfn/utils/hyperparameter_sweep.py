@@ -105,7 +105,7 @@ class HyperparameterSweep:
         # Model-specific parameters
         if model_type == 'tfn':
             kernel_types = ['rbf', 'compact']
-            evolution_types = ['cnn', 'spectral']
+            evolution_types = ['cnn']
             grid_sizes = [32, 64]
             time_steps = [2, 3]
             
@@ -355,7 +355,8 @@ def create_model_factory():
                 evolution_type=config.evolution_type,
                 grid_size=config.grid_size,
                 time_steps=config.time_steps,
-                dropout=config.dropout
+                dropout=config.dropout,
+                task="classification"
             )
         elif model_type == 'transformer':
             from ..model.baseline_classifiers import TransformerClassifier

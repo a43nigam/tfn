@@ -24,7 +24,7 @@ def test_pg19_loader():
     logger.info("Testing PG-19 dataloader...")
     
     try:
-        from tfn_datasets.pg19_loader import create_pg19_dataloader
+        from tfn.tfn_datasets.pg19_loader import create_pg19_dataloader
         
         # Create small dataloader for testing
         train_loader, val_loader, vocab_size = create_pg19_dataloader(
@@ -57,7 +57,7 @@ def test_physics_loader():
     logger.info("Testing physics dataloader...")
     
     try:
-        from tfn_datasets.physics_loader import create_physics_dataloader
+        from tfn.tfn_datasets.physics_loader import create_physics_dataloader
         
         # Create small dataloader for testing
         train_loader, val_loader = create_physics_dataloader(
@@ -93,7 +93,7 @@ def test_grid_utils():
     logger.info("Testing grid size utilities...")
     
     try:
-        from core.grid_utils import compute_auto_grid_size, estimate_memory_usage, estimate_flops
+        from tfn.core.grid_utils import compute_auto_grid_size, estimate_memory_usage, estimate_flops
         
         # Test grid size computation
         seq_lens = [256, 512, 1024, 2048]
@@ -122,7 +122,7 @@ def test_tfn_model():
     logger.info("Testing TFN model...")
     
     try:
-        from model.tfn_base import TrainableTFNLayer
+        from tfn.model.tfn_base import TrainableTFNLayer
         
         # Create TFN layer
         model = TrainableTFNLayer(
@@ -158,7 +158,7 @@ def test_baseline_models():
     logger.info("Testing baseline models...")
     
     try:
-        from model.seq_baselines import SimpleTransformerSeqModel, SimplePerformerSeqModel
+        from tfn.model.seq_baselines import SimpleTransformerSeqModel, SimplePerformerSeqModel
         
         # Test Transformer
         transformer = SimpleTransformerSeqModel(

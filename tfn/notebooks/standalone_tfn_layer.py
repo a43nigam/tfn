@@ -109,27 +109,6 @@ def evolve_field_cnn(field: torch.Tensor, grid_points: torch.Tensor, time_steps:
     return evolved
 
 
-def evolve_field_spectral(field: torch.Tensor, grid_points: torch.Tensor, time_steps: int = 3) -> torch.Tensor:
-    """Evolve field using spectral methods."""
-    B, M, D = field.shape
-    
-    # Use FFT for spectral evolution
-    evolved = field
-    for _ in range(time_steps):
-        # FFT: [B, M, D] -> [B, M, D] (complex)
-        evolved_fft = torch.fft.fft(evolved, dim=1)
-        
-        # Apply spectral filter (low-pass)
-        freq = torch.fft.fftfreq(M, device=field.device)
-        filter_weights = torch.exp(-freq ** 2).unsqueeze(0).unsqueeze(-1)  # [1, M, 1]
-        evolved_fft = evolved_fft * filter_weights
-        
-        # IFFT: [B, M, D] -> [B, M, D]
-        evolved = torch.fft.ifft(evolved_fft, dim=1).real
-    
-    return evolved
-
-
 def evolve_field_pde(field: torch.Tensor, grid_points: torch.Tensor, time_steps: int = 3, dt: float = 0.01) -> torch.Tensor:
     """Evolve field using PDE-based diffusion."""
     B, M, D = field.shape
@@ -216,7 +195,7 @@ def tfn_layer(embeddings: torch.Tensor, positions: torch.Tensor,
         embeddings: [B, N, D] token embeddings
         positions: [B, N, P] token positions (P=1 for 1D)
         kernel_type: "rbf", "compact", or "fourier"
-        evolution_type: "cnn", "spectral", or "pde"
+        evolution_type: "cnn" or "pde"
         embed_dim: embedding dimension (inferred from embeddings if None)
         grid_size: number of grid points for field evaluation
         time_steps: number of evolution steps
@@ -241,8 +220,6 @@ def tfn_layer(embeddings: torch.Tensor, positions: torch.Tensor,
     # Step 2: Field evolution
     if evolution_type == "cnn":
         evolved_field = evolve_field_cnn(field, grid_points, time_steps)
-    elif evolution_type == "spectral":
-        evolved_field = evolve_field_spectral(field, grid_points, time_steps)
     elif evolution_type == "pde":
         evolved_field = evolve_field_pde(field, grid_points, time_steps)
     else:
@@ -267,8 +244,7 @@ def test_tfn_layer():
     # Test different configurations
     configs = [
         ("rbf", "cnn"),
-        ("compact", "spectral"), 
-        ("fourier", "pde")
+        ("compact", "pde")
     ]
     
     for kernel_type, evolution_type in configs:

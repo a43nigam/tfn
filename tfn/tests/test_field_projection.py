@@ -12,9 +12,9 @@ import numpy as np
 from typing import Tuple
 
 # Import the field projection system
-from ..core.field_projection import FieldProjector, UniformFieldGrid
-from ..core.kernels import RBFKernel
-from ..core.utils import validate_shapes, check_numerical_stability
+from tfn.core.field_projection import FieldProjector, UniformFieldGrid
+from tfn.core.kernels import RBFKernel
+from tfn.core.utils import validate_shapes, check_numerical_stability
 
 
 class TestUniformFieldGrid:

@@ -39,25 +39,25 @@ def test_imports():
     print("="*50)
     
     try:
-        from tfn_datasets.pg19_loader import create_pg19_dataloader
+        from tfn.tfn_datasets.pg19_loader import create_pg19_dataloader
         print("✅ PG-19 loader import successful")
     except ImportError as e:
         print(f"❌ PG-19 loader import failed: {e}")
     
     try:
-        from model.tfn_base import TrainableTFNLayer
+        from tfn.model.tfn_base import TrainableTFNLayer
         print("✅ TFN model import successful")
     except ImportError as e:
         print(f"❌ TFN model import failed: {e}")
     
     try:
-        from core.grid_utils import compute_auto_grid_size
+        from tfn.core.grid_utils import compute_auto_grid_size
         print("✅ Grid utils import successful")
     except ImportError as e:
         print(f"❌ Grid utils import failed: {e}")
     
     try:
-        from model.seq_baselines import SimplePerformerSeqModel
+        from tfn.model.seq_baselines import SimplePerformerSeqModel
         print("✅ Baseline models import successful")
     except ImportError as e:
         print(f"❌ Baseline models import failed: {e}")

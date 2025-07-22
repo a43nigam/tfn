@@ -149,7 +149,7 @@ def current_limitations():
     print("\n✅ What Works:")
     print("  - Complete field projection → evolution → sampling pipeline")
     print("  - Multiple kernel types (RBF, Compact, Fourier)")
-    print("  - Multiple evolution methods (CNN, Spectral, PDE)")
+    print("  - Multiple evolution methods (CNN, PDE)")
     print("  - Differentiable end-to-end")
     print("  - Handles variable sequence lengths")
     print("  - Batch processing")

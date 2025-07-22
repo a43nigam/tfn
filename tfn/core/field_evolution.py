@@ -3,7 +3,6 @@ Field evolution system for TFN.
 
 Implements different strategies for evolving continuous fields over time:
 - CNN-based evolution
-- Spectral methods
 - PDE-based evolution (diffusion, wave equations)
 """
 
@@ -28,7 +27,7 @@ class FieldEvolver(nn.Module):
         Args:
             embed_dim: Dimension of field embeddings
             pos_dim: Dimension of spatial coordinates
-            evolution_type: Type of evolution ("cnn", "spectral", "pde")
+            evolution_type: Type of evolution ("cnn", "pde")
         """
         super().__init__()
         self.embed_dim = embed_dim
@@ -37,8 +36,6 @@ class FieldEvolver(nn.Module):
         
         if evolution_type == "cnn":
             self.evolver = CNNFieldEvolver(embed_dim, pos_dim)
-        elif evolution_type == "spectral":
-            self.evolver = SpectralFieldEvolver(embed_dim, pos_dim)
         elif evolution_type == "pde":
             self.evolver = PDEFieldEvolver(embed_dim, pos_dim)
         else:
@@ -121,73 +118,6 @@ class CNNFieldEvolver(nn.Module):
         
         # Reshape back: [B, M, D]
         return field_conv.transpose(1, 2)
-
-
-class SpectralFieldEvolver(nn.Module):
-    """
-    Spectral-based field evolution.
-    
-    Uses Fourier transforms and learned spectral dynamics.
-    """
-    
-    def __init__(self, embed_dim: int, pos_dim: int, num_modes: int = 16):
-        super().__init__()
-        self.embed_dim = embed_dim
-        self.pos_dim = pos_dim
-        self.num_modes = num_modes
-        
-        # Spectral evolution network
-        self.spectral_net = nn.Sequential(
-            nn.Linear(embed_dim * 2, embed_dim),  # Real + imaginary parts
-            nn.ReLU(),
-            nn.Linear(embed_dim, embed_dim),
-            nn.ReLU(),
-            nn.Linear(embed_dim, embed_dim * 2)
-        )
-        
-    def forward(self, field: torch.Tensor, 
-                grid_points: torch.Tensor,
-                time_steps: int = 1,
-                **kwargs) -> torch.Tensor:
-        """
-        Evolve field using spectral methods.
-        
-        Args:
-            field: Initial field [B, M, D]
-            grid_points: Spatial grid points [B, M, P] (not used in spectral)
-            time_steps: Number of time steps
-            **kwargs: Additional arguments
-            
-        Returns:
-            Evolved field [B, M, D]
-        """
-        batch_size, num_points, embed_dim = field.shape
-        
-        # Apply FFT along spatial dimension
-        field_fft = torch.fft.rfft(field, dim=1)  # [B, M//2+1, D]
-        
-        for _ in range(time_steps):
-            # Separate real and imaginary parts
-            real_part = field_fft.real
-            imag_part = field_fft.imag
-            
-            # Concatenate for processing
-            combined = torch.cat([real_part, imag_part], dim=-1)  # [B, M//2+1, 2*D]
-            
-            # Apply spectral evolution
-            evolved = self.spectral_net(combined)  # [B, M//2+1, 2*D]
-            
-            # Split back to real and imaginary
-            real_evolved = evolved[..., :embed_dim]
-            imag_evolved = evolved[..., embed_dim:]
-            
-            # Update field in frequency domain
-            field_fft = torch.complex(real_evolved, imag_evolved)
-        
-        # Apply inverse FFT
-        field_evolved = torch.fft.irfft(field_fft, n=num_points, dim=1)
-        
-        return field_evolved
 
 
 class PDEFieldEvolver(nn.Module):
@@ -347,7 +277,7 @@ def create_field_evolver(embed_dim: int,
     Args:
         embed_dim: Dimension of field embeddings
         pos_dim: Dimension of spatial coordinates
-        evolution_type: Type of evolution ("cnn", "spectral", "pde")
+        evolution_type: Type of evolution ("cnn", "pde")
         **kwargs: Additional arguments for specific evolvers
         
     Returns:

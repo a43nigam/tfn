@@ -1,13 +1,15 @@
 """
 Unit tests for TFN field evolution system.
 
-Tests all evolution types (CNN, Spectral, PDE) for:
+Tests all evolution types (CNN, PDE) for:
 - Shape validation
 - Gradient flow
 - Numerical stability
 - Physical properties
 - Temporal dynamics
 """
+
+import os
 
 import pytest
 import torch
@@ -16,8 +18,8 @@ import numpy as np
 from typing import Tuple
 
 # Import the field evolution system
-from ..core.field_evolution import (
-    FieldEvolver, CNNFieldEvolver, SpectralFieldEvolver, 
+from tfn.core.field_evolution import (
+    FieldEvolver, CNNFieldEvolver, 
     PDEFieldEvolver, TemporalGrid, create_field_evolver
 )
 from tfn.core.utils import validate_shapes, check_numerical_stability
@@ -140,88 +142,6 @@ class TestCNNFieldEvolver:
         assert evolved_1.shape == evolved_5.shape
 
 
-class TestSpectralFieldEvolver:
-    """Test spectral-based field evolution."""
-    
-    @pytest.fixture
-    def evolver(self):
-        """Create spectral evolver for testing."""
-        return SpectralFieldEvolver(embed_dim=32, pos_dim=1)
-    
-    @pytest.fixture
-    def test_data(self):
-        """Create test data for field evolution."""
-        batch_size, num_points, embed_dim = 2, 16, 32  # Power of 2 for FFT
-        
-        # Initial field: [B, M, D]
-        field = torch.randn(batch_size, num_points, embed_dim)
-        
-        # Grid points: [B, M, P]
-        grid_points = torch.linspace(0, 1, num_points).unsqueeze(-1).unsqueeze(0).expand(batch_size, -1, 1)
-        
-        return field, grid_points
-    
-    def test_initialization(self, evolver):
-        """Test evolver initialization."""
-        assert evolver.embed_dim == 32
-        assert evolver.pos_dim == 1
-        assert evolver.num_modes == 16
-        assert isinstance(evolver.spectral_net, nn.Sequential)
-    
-    def test_shape_validation(self, evolver, test_data):
-        """Test that evolution preserves shapes."""
-        field, grid_points = test_data
-        
-        # Single time step
-        evolved_field = evolver(field, grid_points, time_steps=1)
-        assert evolved_field.shape == field.shape
-        
-        # Multiple time steps
-        evolved_field = evolver(field, grid_points, time_steps=3)
-        assert evolved_field.shape == field.shape
-    
-    def test_gradient_flow(self, evolver, test_data):
-        """Test gradient flow through spectral evolution."""
-        field, grid_points = test_data
-        
-        # Make field require gradients
-        field.requires_grad_(True)
-        
-        # Forward pass
-        evolved_field = evolver(field, grid_points, time_steps=2)
-        
-        # Backward pass
-        loss = evolved_field.sum()
-        loss.backward()
-        
-        # Check gradients exist and are finite
-        assert field.grad is not None
-        assert torch.isfinite(field.grad).all()
-    
-    def test_numerical_stability(self, evolver, test_data):
-        """Test numerical stability of spectral evolution."""
-        field, grid_points = test_data
-        
-        evolved_field = evolver(field, grid_points, time_steps=5)
-        
-        # Check for NaN and inf values
-        check_numerical_stability(evolved_field, "Spectral evolved field")
-        
-        # Check that values are finite
-        assert torch.isfinite(evolved_field).all()
-    
-    def test_spectral_properties(self, evolver, test_data):
-        """Test spectral properties of evolution."""
-        field, grid_points = test_data
-        
-        # Check that FFT and IFFT preserve the field (approximately)
-        field_fft = torch.fft.rfft(field, dim=1)
-        field_reconstructed = torch.fft.irfft(field_fft, n=field.shape[1], dim=1)
-        
-        # Should be approximately equal
-        assert torch.allclose(field, field_reconstructed, atol=1e-6)
-
-
 class TestPDEFieldEvolver:
     """Test PDE-based field evolution."""
     
@@ -335,12 +255,6 @@ class TestFieldEvolver:
         assert isinstance(evolver.evolver, CNNFieldEvolver)
         assert evolver.evolution_type == "cnn"
     
-    def test_spectral_creation(self):
-        """Test creating spectral evolver through main interface."""
-        evolver = FieldEvolver(embed_dim=32, pos_dim=1, evolution_type="spectral")
-        assert isinstance(evolver.evolver, SpectralFieldEvolver)
-        assert evolver.evolution_type == "spectral"
-    
     def test_pde_creation(self):
         """Test creating PDE evolver through main interface."""
         evolver = FieldEvolver(embed_dim=16, pos_dim=1, evolution_type="pde")
@@ -377,11 +291,6 @@ class TestFieldEvolutionIntegration:
         assert isinstance(cnn_evolver, FieldEvolver)
         assert isinstance(cnn_evolver.evolver, CNNFieldEvolver)
         
-        # Test spectral evolver
-        spectral_evolver = create_field_evolver(embed_dim=32, pos_dim=1, evolution_type="spectral")
-        assert isinstance(spectral_evolver, FieldEvolver)
-        assert isinstance(spectral_evolver.evolver, SpectralFieldEvolver)
-        
         # Test PDE evolver
         pde_evolver = create_field_evolver(embed_dim=16, pos_dim=1, evolution_type="pde")
         assert isinstance(pde_evolver, FieldEvolver)
@@ -391,7 +300,6 @@ class TestFieldEvolutionIntegration:
         """Test that different evolution types produce consistent shapes."""
         evolvers = [
             FieldEvolver(embed_dim=32, pos_dim=1, evolution_type="cnn"),
-            FieldEvolver(embed_dim=32, pos_dim=1, evolution_type="spectral"),
             FieldEvolver(embed_dim=32, pos_dim=1, evolution_type="pde")
         ]
         

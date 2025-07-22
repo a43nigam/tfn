@@ -48,46 +48,12 @@ def texts_to_tensor(
 # Dataset-specific loaders
 # -----------------------------------------------------------------------------
 
+from .text_classification import load_agnews as _modern_load_agnews
 
-def load_agnews(
-    seq_len: int = 128,
-    vocab_size: int = 10000,
-    val_split: int = 10000,
-    shuffle_train: bool = False,
-    shuffle_eval: bool = False,
-):
-    """Return (train_ds, val_ds, vocab_size)."""
-    # Lazy import to avoid heavy dependencies unless used
-    try:
-        from tfn.datasets.debug_stability_agnews import download_agnews_data  # type: ignore
-    except ImportError:
-        from stability_test import download_agnews_data  # fallback to root script
 
-    train_raw, _ = download_agnews_data()
-    random.seed(42)
-    random.shuffle(train_raw)
-
-    if val_split >= len(train_raw):
-        val_split = max(1, int(0.2 * len(train_raw)))
-
-    val_raw = train_raw[:val_split]
-    train_raw = train_raw[val_split:]
-
-    train_texts = [t for t, _ in train_raw]
-    val_texts = [t for t, _ in val_raw]
-    train_labels = [l for _, l in train_raw]
-    val_labels = [l for _, l in val_raw]
-
-    word2idx = build_vocab(train_texts, vocab_size)
-
-    train_ids = texts_to_tensor(train_texts, word2idx, seq_len, shuffle_train)
-    val_ids = texts_to_tensor(val_texts, word2idx, seq_len, shuffle_eval)
-
-    return (
-        TensorDataset(train_ids, torch.tensor(train_labels)),
-        TensorDataset(val_ids, torch.tensor(val_labels)),
-        len(word2idx),
-    )
+def load_agnews(*args, **kwargs):
+    """Wrapper for AG News loader that uses the robust implementation in text_classification.py."""
+    return _modern_load_agnews(*args, **kwargs)
 
 
 def _load_hf(dataset_name: str, split: str):

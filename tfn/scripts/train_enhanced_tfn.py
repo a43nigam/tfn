@@ -9,15 +9,23 @@ Supports all field interference types, evolution types, and physics constraints.
 import argparse
 import json
 import time
+import os
+import sys
 from pathlib import Path
 from typing import Dict, Any, Optional
+
+# Add parent directory to Python path for imports
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
+
 import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader, TensorDataset
 import numpy as np
 
-from tfn.model.tfn_enhanced import EnhancedTFNModel, create_enhanced_tfn_model
+from tfn.model.tfn_enhanced import create_enhanced_tfn_model
+from tfn.model.registry import validate_kernel_evolution
+from tfn.model.tfn_classifiers import EnhancedTFNClassifier
 from tfn.tfn_datasets import dataset_loaders as dl
 
 
@@ -54,7 +62,7 @@ def parse_args() -> argparse.Namespace:
                        choices=["rbf", "compact", "fourier"],
                        help="Kernel type for field projection")
     parser.add_argument("--evolution_type", type=str, default="diffusion",
-                       choices=["diffusion", "wave", "schrodinger", "cnn", "spectral"],
+                       choices=["diffusion", "wave", "schrodinger", "cnn"],
                        help="Field evolution type")
     parser.add_argument("--interference_type", type=str, default="standard",
                        choices=["standard", "causal", "multiscale", "physics"],
@@ -91,6 +99,7 @@ def parse_args() -> argparse.Namespace:
                        help="Device to use")
     parser.add_argument("--log_interval", type=int, default=100,
                        help="Logging interval")
+    parser.add_argument('--seed', type=int, default=42, help='Random seed for reproducibility')
     
     return parser.parse_args()
 
@@ -135,13 +144,13 @@ def load_dataset(args: argparse.Namespace) -> tuple:
         return train_data, val_data, vocab_size, num_classes
 
 
-def create_model(args: argparse.Namespace, vocab_size: int, num_classes: int) -> EnhancedTFNModel:
-    """Create Enhanced TFN model with specified configuration."""
-    model = create_enhanced_tfn_model(
+def create_model(args: argparse.Namespace, vocab_size: int, num_classes: int) -> EnhancedTFNClassifier:
+    """Create Enhanced TFN classifier with specified configuration."""
+    model = EnhancedTFNClassifier(
         vocab_size=vocab_size,
         embed_dim=args.embed_dim,
+        num_classes=num_classes,
         num_layers=args.num_layers,
-        pos_dim=args.pos_dim,
         kernel_type=args.kernel_type,
         evolution_type=args.evolution_type,
         interference_type=args.interference_type,
@@ -176,7 +185,7 @@ def train_epoch(model: nn.Module,
         
         # Compute loss
         if args.task == "classification":
-            loss = criterion(logits.view(-1, logits.size(-1)), labels.view(-1))
+            loss = criterion(logits, labels)
             predictions = logits.argmax(dim=-1)
             correct = (predictions == labels).sum().item()
             total_correct += correct
@@ -234,7 +243,7 @@ def evaluate(model: nn.Module,
             
             # Compute loss
             if args.task == "classification":
-                loss = criterion(logits.view(-1, logits.size(-1)), labels.view(-1))
+                loss = criterion(logits, labels)
                 predictions = logits.argmax(dim=-1)
                 correct = (predictions == labels).sum().item()
                 total_correct += correct
@@ -255,6 +264,21 @@ def evaluate(model: nn.Module,
 def main():
     """Main training function."""
     args = parse_args()
+    # Set all random seeds for reproducibility
+    import random, numpy as np, torch
+    random.seed(args.seed)
+    np.random.seed(args.seed)
+    torch.manual_seed(args.seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(args.seed)
+    
+    # Fail-fast on invalid kernel/evolution combination
+    try:
+        validate_kernel_evolution(args.kernel_type, args.evolution_type)
+    except ValueError as e:
+        print(f"[ConfigError] {e}");
+        return
+    
     device = torch.device(args.device)
     
     print(f"🚀 Starting Enhanced TFN Training")

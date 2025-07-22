@@ -11,16 +11,15 @@ from .tfn_base import (
     TrainableTFNLayer
 )
 
-from .tfn_classifiers import (
-    TFNClassifier,
-    TFNRegressor
-)
+from .tfn_unified import UnifiedTFN
+from .tfn_pytorch import ImageTFN
 
-from .tfn_2d import (
-    TrainableTFNLayer2D,
-    TFNClassifier2D,
-    create_tfn2d_variants,
-)
+# ---------------------------------------------------------------------------
+# Backward-compatibility aliases (deprecated)
+# ---------------------------------------------------------------------------
+
+TFNClassifier = UnifiedTFN  # Legacy alias for tests / old scripts
+TFNRegressor = UnifiedTFN   # Legacy alias
 
 __all__ = [
     # Base components
@@ -29,13 +28,7 @@ __all__ = [
     'PositionEmbeddings',
     'TrainableTFNLayer',
     
-    # Complete models
-    'TFNClassifier',
-    'TFNRegressor',
-]
-
-__all__ += [
-    'TrainableTFNLayer2D',
-    'TFNClassifier2D',
-    'create_tfn2d_variants',
+    # Unified model
+    'UnifiedTFN', 'TFNClassifier', 'TFNRegressor',
+    'ImageTFN',
 ]

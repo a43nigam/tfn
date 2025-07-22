@@ -15,7 +15,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 def test_grid_size_heuristics(args):
     """Test grid size heuristics with parameters."""
     try:
-        from core.grid_utils import compute_auto_grid_size, estimate_memory_usage, estimate_flops
+        from tfn.core.grid_utils import compute_auto_grid_size, estimate_memory_usage, estimate_flops
         
         print("Testing grid size heuristics...")
         

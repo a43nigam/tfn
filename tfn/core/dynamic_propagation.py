@@ -48,7 +48,7 @@ class DynamicFieldPropagator(nn.Module):
         Args:
             embed_dim: Dimension of token embeddings
             pos_dim: Dimension of position space
-            evolution_type: Type of evolution ("diffusion", "wave", "schrodinger")
+            evolution_type: Type of evolution ("diffusion", "wave", "schrodinger", "cnn")
             interference_type: Type of interference ("standard", "causal", "multiscale", "physics")
             num_steps: Number of evolution steps
             dt: Time step size
@@ -74,6 +74,19 @@ class DynamicFieldPropagator(nn.Module):
             # Complex Hamiltonian for Schrödinger equation
             self.hamiltonian_real = nn.Parameter(torch.eye(embed_dim))
             self.hamiltonian_imag = nn.Parameter(torch.zeros(embed_dim, embed_dim))
+        elif evolution_type == "cnn":
+            # CNN layers for spatial evolution
+            hidden_dim = max(embed_dim // 2, 64)
+            self.conv1 = nn.Conv1d(embed_dim, hidden_dim, kernel_size=3, padding=1)
+            self.conv2 = nn.Conv1d(hidden_dim, hidden_dim, kernel_size=3, padding=1)
+            self.conv3 = nn.Conv1d(hidden_dim, embed_dim, kernel_size=3, padding=1)
+            
+            # Batch normalization
+            self.bn1 = nn.BatchNorm1d(hidden_dim)
+            self.bn2 = nn.BatchNorm1d(hidden_dim)
+            
+            # Residual connection
+            self.residual = nn.Linear(embed_dim, embed_dim)
         
         # Field interference module
         self.interference = TokenFieldInterference(
@@ -162,6 +175,9 @@ class DynamicFieldPropagator(nn.Module):
         elif self.evolution_type == "schrodinger":
             evolution = self._schrodinger_evolution(fields)
             return evolution, None
+        elif self.evolution_type == "cnn":
+            evolution = self._cnn_evolution(fields)
+            return evolution, None
         else:
             raise ValueError(f"Unknown evolution type: {self.evolution_type}")
     
@@ -242,6 +258,25 @@ class DynamicFieldPropagator(nn.Module):
         
         # For real fields, we only keep the real part of the evolution
         return evolution_real
+    
+    def _cnn_evolution(self, fields: torch.Tensor) -> torch.Tensor:
+        """Compute CNN-based evolution using 1D convolutions."""
+        batch_size, num_tokens, embed_dim = fields.shape
+        
+        # Reshape for 1D convolution: [B, D, N]
+        fields_conv = fields.transpose(1, 2)
+        
+        # Apply 1D convolution layers for spatial evolution
+        # This simulates the CNN evolution from field_evolution.py
+        x = F.relu(self.bn1(self.conv1(fields_conv)))
+        x = F.relu(self.bn2(self.conv2(x)))
+        x = self.conv3(x)
+        
+        # Residual connection
+        evolution = x + self.residual(fields_conv.transpose(1, 2)).transpose(1, 2)
+        
+        # Reshape back: [B, N, D]
+        return evolution.transpose(1, 2)
     
     def _compute_interference_term(self, 
                                   fields: torch.Tensor,  # [B, N, D]

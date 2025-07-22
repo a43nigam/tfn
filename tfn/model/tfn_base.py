@@ -11,6 +11,10 @@ import torch.fft
 import math
 from typing import Optional, Tuple, Literal
 
+from tfn.core.field_projection import FieldProjector
+from tfn.core.field_evolution import FieldEvolver
+from tfn.core.field_sampling import FieldSampler
+
 
 class LearnableKernels(nn.Module):
     """Learnable kernel parameters for field projection."""
@@ -90,10 +94,6 @@ class TrainableEvolution(nn.Module):
             for conv in self.conv_layers:
                 nn.init.normal_(conv.weight, 0, 0.1)
         
-        elif evolution_type == "spectral":
-            # Learnable spectral filter
-            self.filter_weights = nn.Parameter(torch.ones(embed_dim))
-        
         elif evolution_type == "pde":
             # Learnable diffusion coefficient
             self.alpha = nn.Parameter(torch.tensor(0.1))
@@ -103,8 +103,6 @@ class TrainableEvolution(nn.Module):
         """Evolve field with trainable parameters."""
         if self.evolution_type == "cnn":
             return self._cnn_evolution(field)
-        elif self.evolution_type == "spectral":
-            return self._spectral_evolution(field, grid_points)
         elif self.evolution_type == "pde":
             return self._pde_evolution(field, grid_points)
         else:
@@ -119,25 +117,6 @@ class TrainableEvolution(nn.Module):
             evolved = conv(evolved)
             evolved = evolved.transpose(1, 2)
             evolved = F.relu(evolved)
-        return evolved
-    
-    def _spectral_evolution(self, field: torch.Tensor, grid_points: torch.Tensor) -> torch.Tensor:
-        """Spectral evolution with learnable filter."""
-        B, M, D = field.shape
-        evolved = field
-        
-        for _ in range(self.time_steps):
-            # FFT
-            evolved_fft = torch.fft.fft(evolved, dim=1)
-            
-            # Apply learnable filter
-            filter_weights = torch.clamp(self.filter_weights, min=0.01, max=2.0)
-            filter_weights = filter_weights.unsqueeze(0).unsqueeze(1)  # [1, 1, D]
-            evolved_fft = evolved_fft * filter_weights
-            
-            # IFFT
-            evolved = torch.fft.ifft(evolved_fft, dim=1).real
-        
         return evolved
     
     def _pde_evolution(self, field: torch.Tensor, grid_points: torch.Tensor) -> torch.Tensor:

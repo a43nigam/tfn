@@ -16,8 +16,8 @@ sys.path.insert(0, os.path.dirname(__file__))
 def test_physics_pde_evolution(args):
     """Test physics PDE evolution with parameters."""
     try:
-        from tfn_datasets.physics_loader import create_physics_dataloader, compute_pde_metrics
-        from model.tfn_base import TrainableTFNLayer
+        from tfn.tfn_datasets.physics_loader import create_physics_dataloader, compute_pde_metrics
+        from tfn.model.tfn_base import TrainableTFNLayer
         
         print("Testing physics PDE evolution...")
         

@@ -38,7 +38,7 @@ def test_pg19_loader(args):
             return {"error": "datasets library not available"}
         
         # Import our PG-19 loader
-        from tfn_datasets.pg19_loader import create_pg19_dataloader
+        from tfn.tfn_datasets.pg19_loader import create_pg19_dataloader
         
         print("Testing PG-19 dataloader...")
         
@@ -66,7 +66,7 @@ def test_pg19_loader(args):
         print(f"Using device: {device}")
         
         # Create a simple model for throughput test
-        from model.tfn_base import TrainableTFNLayer
+        from tfn.model.tfn_base import TrainableTFNLayer
         
         model = torch.nn.Sequential(
             torch.nn.Embedding(vocab_size, args.embed_dim),

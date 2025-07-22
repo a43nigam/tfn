@@ -1,0 +1,11 @@
+============================= test session starts ==============================
+platform darwin -- Python 3.11.8, pytest-8.3.4, pluggy-1.5.0 -- /Users/anubhavnigam/anaconda3/bin/python
+cachedir: .pytest_cache
+rootdir: /Users/anubhavnigam/Desktop/ideas/tfn
+plugins: anyio-4.6.2
+collecting ... collected 128 items
+
+tfn/test_field_interference.py::test_field_interference PASSED           [  0%]
+tfn/test_field_interference.py::test_dynamic_propagation PASSED          [  1%]
+tfn/test_field_interference.py::test_interaction_operators PASSED        [  2%]
+tfn/test_field_interference.py::test_enhanced_tfn_integration 

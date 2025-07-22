@@ -14,7 +14,26 @@ from torch.utils.data import DataLoader
 import torchvision.transforms as T
 from torchvision.datasets import CIFAR10
 
-from tfn.model.tfn_2d import TFNClassifier2D
+from tfn.model.tfn_pytorch import ImageTFN
+from tfn.model.registry import validate_kernel_evolution
+
+"""Train a 2-D TFN on CIFAR datasets.
+
+This script may be executed from an arbitrary working directory
+(e.g. Kaggle) where the *tfn* source folder is merely present in the
+session and not yet installed as a site-package.  To make that scenario
+work seamlessly we prepend the parent-of-parent directory of this file
+to `sys.path` **before** importing from `tfn.*` – this has no effect when
+the package is already properly installed (it will be ignored because
+`import tfn` succeeds).
+"""
+
+import os, sys
+# Ensure `tfn` is importable when the package hasn’t been pip-installed yet
+if "tfn" not in sys.modules:
+    repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+    if repo_root not in sys.path:
+        sys.path.insert(0, repo_root)
 
 class PatchEmbed(nn.Module):
     """Convert an image to a sequence of patch embeddings."""
@@ -30,39 +49,14 @@ class PatchEmbed(nn.Module):
         return x
 
 class VisionTFN(nn.Module):
-    def __init__(self, embed_dim: int = 256, num_classes: int = 10,
-                 patch_size: int = 4, grid_size: int = 8,
-                 tfn_layers: int = 4, evo_steps: int = 5,
-                 field_dropout: float = 0.0, multiscale: bool = False,
-                 kernel_mix: bool = False, kernel_mix_scale: float = 2.0,
-                 out_sigma_scale: float = 2.0, learnable_out_sigma: bool = False):
+    """Wrapper around ImageTFN for consistency with old training loop."""
+
+    def __init__(self, num_classes: int = 10):
         super().__init__()
-        self.patch_embed = PatchEmbed(3, patch_size, embed_dim)
-        self.tfn = TFNClassifier2D(
-            vocab_size=1,  # dummy (we supply embeddings directly)
-            embed_dim=embed_dim,
-            num_classes=num_classes,
-            num_layers=tfn_layers,
-            num_evolution_steps=evo_steps,
-            grid_height=grid_size,
-            grid_width=grid_size,
-            use_dynamic_positions=False,
-            learnable_sigma=True,
-            learnable_out_sigma=learnable_out_sigma,
-            out_sigma_scale=out_sigma_scale,
-            field_dropout=field_dropout,
-            multiscale=multiscale,
-            kernel_mix=kernel_mix,
-            kernel_mix_scale=kernel_mix_scale,
-            use_global_context=False,
-        )
-        # overwrite token embedding with identity (we pass embeddings)
-        self.tfn.embed = nn.Identity()
+        self.tfn = ImageTFN(in_ch=3, num_classes=num_classes)
 
     def forward(self, images: torch.Tensor):
-        tokens = self.patch_embed(images)  # (B,N,E)
-        logits, _ = self.tfn(tokens)  # treat tokens as pre-embedded
-        return logits
+        return self.tfn(images)
 
 def parse_args():
     p = argparse.ArgumentParser("TFN on CIFAR-10")
@@ -83,7 +77,7 @@ def parse_args():
                    choices=["rbf", "compact", "fourier"],
                    help="Kernel type for field projection")
     p.add_argument("--evolution_type", type=str, default="cnn",
-                   choices=["cnn", "spectral", "pde"],
+                   choices=["cnn", "pde"],
                    help="Evolution type for field dynamics")
     p.add_argument("--grid_size", type=int, default=64,
                    help="Grid size for field evaluation")
@@ -101,6 +95,13 @@ def parse_args():
 
 def main():
     args = parse_args()
+
+    try:
+        validate_kernel_evolution(args.kernel_type, args.evolution_type)
+    except ValueError as e:
+        print(f"[ConfigError] {e}");
+        return
+
     device = torch.device(args.device)
 
     transform = T.Compose([
@@ -114,14 +115,7 @@ def main():
 
     grid_size = 32 // args.patch_size  # e.g., 8 for 4-pixel patches
 
-    model = VisionTFN(args.embed_dim, 10, args.patch_size, grid_size,
-                      args.tfn_layers, args.evo_steps,
-                      field_dropout=args.field_dropout,
-                      multiscale=args.multiscale,
-                      kernel_mix=args.kernel_mix,
-                      kernel_mix_scale=args.kernel_mix_scale,
-                      out_sigma_scale=args.out_sigma_scale,
-                      learnable_out_sigma=args.learnable_out_sigma).to(device)
+    model = VisionTFN(10).to(device)
     criterion = nn.CrossEntropyLoss()
     opt = torch.optim.AdamW(model.parameters(), lr=args.lr)
 

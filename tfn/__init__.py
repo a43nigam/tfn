@@ -17,12 +17,12 @@ __email__ = "anubhav.nigam@example.com"
 
 # Import main components for easy access
 from .model import (
-    TFNClassifier,
-    TFNRegressor,
+    UnifiedTFN,
+    ImageTFN,
     TrainableTFNLayer,
     LearnableKernels,
     TrainableEvolution,
-    PositionEmbeddings
+    PositionEmbeddings,
 )
 
 from .core import (
@@ -36,7 +36,6 @@ from .core import (
     UniformFieldGrid,
     FieldEvolver,
     CNNFieldEvolver,
-    SpectralFieldEvolver,
     PDEFieldEvolver,
     TemporalGrid,
     FieldSampler
@@ -49,8 +48,8 @@ __all__ = [
     "__email__",
     
     # Model classes
-    "TFNClassifier",
-    "TFNRegressor", 
+    "UnifiedTFN",
+    "ImageTFN",
     "TrainableTFNLayer",
     "LearnableKernels",
     "TrainableEvolution",
@@ -67,7 +66,6 @@ __all__ = [
     "UniformFieldGrid",
     "FieldEvolver",
     "CNNFieldEvolver",
-    "SpectralFieldEvolver",
     "PDEFieldEvolver",
     "TemporalGrid",
     "FieldSampler",

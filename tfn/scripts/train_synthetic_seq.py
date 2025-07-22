@@ -45,6 +45,7 @@ from torch.utils.data import DataLoader
 
 # pylint: disable=relative-beyond-top-level
 from tfn.utils.synthetic_sequence_tasks import get_synthetic_sequence_dataloaders
+from tfn.model.registry import validate_kernel_evolution
 from tfn.model.seq_baselines import (
     TFNSeqModel,
     SimpleTransformerSeqModel,
@@ -190,7 +191,7 @@ if __name__ == "__main__":
                        choices=["rbf", "compact", "fourier"],
                        help="Kernel type for field projection (TFN only)")
     parser.add_argument("--evolution_type", type=str, default="cnn",
-                       choices=["cnn", "spectral", "pde"],
+                       choices=["cnn", "pde"],
                        help="Evolution type for field dynamics (TFN only)")
     parser.add_argument("--grid_size", type=int, default=256,
                        help="Grid size for field evaluation (TFN only)")
@@ -204,4 +205,12 @@ if __name__ == "__main__":
     parser.add_argument("--out_csv", type=str, default="synthetic_seq_results.csv")
 
     args = parser.parse_args()
+
+    try:
+        validate_kernel_evolution(args.kernel_type, args.evolution_type)
+    except ValueError as e:
+        import sys
+        print(f"[ConfigError] {e}")
+        sys.exit(1)
+
     train(args) 

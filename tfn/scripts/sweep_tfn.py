@@ -90,7 +90,7 @@ def get_sweep_configurations(sweep_type: str, model_type: str) -> List[Dict[str,
     
     elif sweep_type == 'evolution':
         # Sweep over evolution types
-        evolution_types = ['cnn', 'spectral', 'pde']
+        evolution_types = ['cnn', 'pde']
         for evolution_type in evolution_types:
             configs.append({
                 'kernel_type': 'rbf',
@@ -137,7 +137,8 @@ def create_model_from_config(config: Dict[str, Any], model_type: str, device: to
             evolution_type=config['evolution_type'],
             grid_size=config['grid_size'],
             time_steps=config['time_steps'],
-            dropout=config['dropout']
+            dropout=config['dropout'],
+            task="classification"
         )
         
     elif model_type == 'tfn_regressor':

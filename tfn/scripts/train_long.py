@@ -40,7 +40,15 @@ from torch.utils.data import DataLoader, TensorDataset
 
 from tfn.tfn_datasets import dataset_loaders as dl
 from tfn.model import TFNClassifier
-from tfn.model.tfn_2d import TFNClassifier2D, create_tfn2d_variants
+from tfn.model.registry import validate_kernel_evolution
+from tfn.model.tfn_pytorch import ImageTFN as TFNClassifier2D
+
+# Simple replacement for create_tfn2d_variants using ImageTFN
+def create_tfn2d_variants(num_classes: int = 10) -> Dict[str, nn.Module]:
+    return {
+        "image_basic": TFNClassifier2D(num_classes=num_classes),
+    }
+
 
 # -----------------------------------------------------------------------------
 # Scheduler utilities
@@ -83,6 +91,7 @@ def create_tfn_variants(vocab_size: int, num_classes: int, embed_dim: int = 128,
             evolution_type=evolution_type,
             grid_size=grid_size,
             time_steps=time_steps,
+            task="classification"
         ),
         "tfn_deep": TFNClassifier(
             vocab_size=vocab_size,
@@ -93,6 +102,7 @@ def create_tfn_variants(vocab_size: int, num_classes: int, embed_dim: int = 128,
             evolution_type=evolution_type,
             grid_size=grid_size,
             time_steps=time_steps,
+            task="classification"
         ),
     }
 
@@ -161,7 +171,7 @@ def parse_args() -> argparse.Namespace:
                    choices=["rbf", "compact", "fourier"],
                    help="Kernel type for field projection")
     p.add_argument("--evolution_type", type=str, default="cnn",
-                   choices=["cnn", "spectral", "pde"],
+                   choices=["cnn", "pde"],
                    help="Evolution type for field dynamics")
     p.add_argument("--grid_size", type=int, default=100,
                    help="Grid size for field evaluation (1D)")
@@ -184,6 +194,13 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
+
+    try:
+        validate_kernel_evolution(args.kernel_type, args.evolution_type)
+    except ValueError as e:
+        print(f"[ConfigError] {e}")
+        return
+
     device = torch.device(args.device)
 
     # ------------------- Data ------------------- #
@@ -205,12 +222,7 @@ def main() -> None:
                                      grid_size=args.grid_size, time_steps=args.time_steps)
     else:
         variants = create_tfn2d_variants(
-            vocab_size=vocab_size,
             num_classes=num_classes,
-            embed_dim=args.embed_dim,
-            evo_steps=args.evo_steps,
-            grid_height=args.grid_height,
-            grid_width=args.grid_width,
         )
 
     if args.variant not in variants:

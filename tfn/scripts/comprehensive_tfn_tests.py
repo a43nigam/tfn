@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
-"""
-Comprehensive TFN Testing Script
+"""Comprehensive TFN test runner.
 
-Runs all TFN tests discussed in the strategy:
-1. Long-sequence efficiency tests (PG-19)
-2. Physics PDE evolution tests
-3. Multimodal tests
-4. Robustness and transfer tests
+Adds repo root to sys.path when executed as a plain script so `import tfn` works.
 """
+
+import os, sys
+if "tfn" not in sys.modules:
+    repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+    if repo_root not in sys.path:
+        sys.path.insert(0, repo_root)
 
 import argparse
 import logging
@@ -23,12 +24,12 @@ import numpy as np
 import matplotlib.pyplot as plt
 import wandb
 
-# Import TFN components
-from ..datasets.pg19_loader import create_pg19_dataloader, compute_perplexity, measure_memory_usage
-from ..datasets.physics_loader import create_physics_dataloader, compute_pde_metrics, visualize_pde_prediction
-from ..model.tfn_base import TrainableTFNLayer
-from ..model.seq_baselines import TransformerEncoder, PerformerEncoder
-from ..core.grid_utils import compute_auto_grid_size, estimate_memory_usage, estimate_flops
+from tfn.tfn_datasets.pg19_loader import create_pg19_dataloader, compute_perplexity, measure_memory_usage
+from tfn.tfn_datasets.physics_loader import create_physics_dataloader, compute_pde_metrics, visualize_pde_prediction
+from tfn.model.tfn_base import TrainableTFNLayer
+from tfn.model.seq_baselines import TransformerEncoder, PerformerEncoder
+from tfn.scripts.train_pg19 import TFNLanguageModel
+from tfn.core.grid_utils import compute_auto_grid_size, estimate_memory_usage, estimate_flops
 
 
 def setup_logging(log_level: str = "INFO") -> None:
@@ -71,7 +72,7 @@ class TFNPhysicsModel(nn.Module):
         
         # TFN layers
         self.tfn_layers = nn.ModuleList([
-            TrainableTFNLayer(
+            tfn_base.TrainableTFNLayer(
                 embed_dim=embed_dim,
                 kernel_type=kernel_type,
                 evolution_type=evolution_type,
@@ -177,7 +178,6 @@ def test_long_sequence_efficiency(
                 
                 # Create model
                 if model_type == "tfn":
-                    from ..scripts.train_pg19 import TFNLanguageModel
                     model = TFNLanguageModel(
                         vocab_size=vocab_size,
                         embed_dim=embed_dim,
@@ -569,8 +569,4 @@ def main():
 
 
 if __name__ == "__main__":
-    import sys
-    import os
-    # Add the parent directory to the path so we can import tfn modules
-    sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
     main() 

@@ -89,7 +89,8 @@ class ComprehensiveBenchmark:
                     evolution_type=config.evolution_type,
                     grid_size=config.grid_size,
                     time_steps=config.time_steps,
-                    dropout=config.dropout
+                    dropout=config.dropout,
+                    task="classification"
                 )
             elif model_type == 'transformer':
                 return TransformerClassifier(

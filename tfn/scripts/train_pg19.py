@@ -1,10 +1,18 @@
 #!/usr/bin/env python3
-"""
-PG-19 Language Modeling Training Script
+"""PG-19 language-model training.
 
-Trains TFN models on PG-19 dataset for long-sequence language modeling.
-Compares with Transformer and Performer baselines.
+This script may be executed via `python tfn/scripts/train_pg19.py` (file path)
+or `python -m tfn.scripts.train_pg19` (module).  To support the first form we
+ensure the TFN repo root is on `sys.path` *before* importing from `tfn.*` and
+replace old relative imports (`from ..foo import`) with absolute ones.
 """
+
+import os, sys
+# Make sure `tfn` is importable when running as a plain script
+if "tfn" not in sys.modules:
+    repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+    if repo_root not in sys.path:
+        sys.path.insert(0, repo_root)
 
 import argparse
 import logging
@@ -18,18 +26,20 @@ import torch.optim as optim
 from torch.utils.data import DataLoader
 import wandb
 
-# Import TFN components
-from ..tfn_datasets.pg19_loader import (
+# Absolute imports instead of package-relative
+from tfn.tfn_datasets.pg19_loader import (
     create_pg19_dataloader,
     compute_perplexity,
     measure_memory_usage,
 )
-from ..model.tfn_base import TrainableTFNLayer
-from ..model.seq_baselines import (
+# Models
+from tfn.model.tfn_base import TrainableTFNLayer
+from tfn.model.seq_baselines import (
     SimpleTransformerSeqModel,
     SimplePerformerSeqModel,
 )
-from ..core.grid_utils import compute_auto_grid_size, estimate_memory_usage, estimate_flops
+from tfn.core.grid_utils import compute_auto_grid_size, estimate_memory_usage, estimate_flops
+from tfn.model.registry import validate_kernel_evolution
 
 
 def setup_logging(log_level: str = "INFO") -> None:
@@ -360,7 +370,7 @@ def main():
                        choices=["rbf", "compact", "fourier"],
                        help="Kernel type for TFN")
     parser.add_argument("--evolution_type", type=str, default="cnn",
-                       choices=["cnn", "spectral", "pde"],
+                       choices=["cnn", "pde"],
                        help="Evolution type for TFN")
     parser.add_argument("--learning_rate", type=float, default=1e-4,
                        help="Learning rate")
@@ -382,6 +392,13 @@ def main():
                        help="Logging interval")
     
     args = parser.parse_args()
+
+    # Validate kernel/evolution combo
+    try:
+        validate_kernel_evolution(args.kernel_type, args.evolution_type)
+    except ValueError as e:
+        print(f"[ConfigError] {e}")
+        return
     
     # Setup
     setup_logging()

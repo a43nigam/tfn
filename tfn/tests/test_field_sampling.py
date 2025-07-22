@@ -1,6 +1,6 @@
 import torch
 import pytest
-from ..core.field_sampling import FieldSampler
+from tfn.core.field_sampling import FieldSampler
 
 def make_test_field(batch_size=2, grid_size=10, embed_dim=4):
     # Uniform grid in [0, 1]

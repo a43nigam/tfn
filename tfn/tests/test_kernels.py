@@ -15,11 +15,11 @@ import numpy as np
 from typing import Tuple
 
 # Import the kernel system
-from ..core.kernels import (
+from tfn.core.kernels import (
     KernelBasis, RBFKernel, CompactKernel, FourierKernel, 
     LearnableKernel, KernelFactory
 )
-from ..core.utils import validate_shapes, check_gradient_flow, check_numerical_stability
+from tfn.core.utils import validate_shapes, check_gradient_flow, check_numerical_stability
 
 
 class TestKernelBasis:

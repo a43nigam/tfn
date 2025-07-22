@@ -35,7 +35,6 @@ def simple_tfn_example():
     
     configs = [
         ("rbf", "cnn", "RBF kernel + CNN evolution"),
-        ("compact", "spectral", "Compact kernel + Spectral evolution"),
         ("fourier", "pde", "Fourier kernel + PDE evolution")
     ]
     
@@ -121,7 +120,7 @@ def multi_sentence_example():
     print(f"Embeddings shape: {embeddings.shape}")
     
     # Apply TFN layer
-    updated = tfn_layer(embeddings, positions, kernel_type="compact", evolution_type="spectral")
+    updated = tfn_layer(embeddings, positions, kernel_type="compact", evolution_type="cnn")
     
     print(f"✅ Updated shape: {updated.shape}")
     

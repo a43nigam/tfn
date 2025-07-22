@@ -44,16 +44,16 @@ import torch.nn as nn
 
 # Local imports -------------------------------------------------------------
 try:
-    from tfn_datasets.pg19_loader import (
+    from tfn.tfn_datasets.pg19_loader import (
         create_pg19_dataloader,
         compute_perplexity,
         measure_memory_usage,
     )
-    from model.tfn_base import TrainableTFNLayer
-    from model.seq_baselines import (
+    from tfn.model.tfn_base import TrainableTFNLayer
+    from tfn.model.seq_baselines import (
         SimplePerformerSeqModel,
     )
-    from core.grid_utils import compute_auto_grid_size
+    from tfn.core.grid_utils import compute_auto_grid_size
 except ImportError as e:
     print(f"Import error: {e}")
     print("Current sys.path:", sys.path)

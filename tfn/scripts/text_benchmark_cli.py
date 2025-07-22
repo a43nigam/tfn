@@ -39,7 +39,7 @@ from torch.utils.data import DataLoader, TensorDataset
 
 # Local imports
 from tfn.model.tfn_classifiers import TFNClassifier
-import tfn.datasets.dataset_loaders as dl  # updated path
+from tfn.tfn_datasets import dataset_loaders as dl
 
 # -----------------------------------------------------------------------------
 # Utility functions
@@ -168,7 +168,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--kernel_type", type=str, default="rbf",
                    choices=["rbf", "compact", "fourier"])
     p.add_argument("--evolution_type", type=str, default="cnn",
-                   choices=["cnn", "spectral", "pde"])
+                   choices=["cnn", "pde"])
     p.add_argument("--grid_size", type=int, default=64)
     p.add_argument("--time_steps", type=int, default=3)
     p.add_argument("--dropout", type=float, default=0.1)
@@ -202,16 +202,19 @@ def main() -> None:
 
     # Model
     model = TFNClassifier(
-        vocab_size=vocab_size,
         embed_dim=args.embed_dim,
-        num_classes=num_classes,
         num_layers=args.num_layers,
+        num_classes=num_classes,
+        vocab_size=vocab_size,
+        # seq_len=args.seq_len,  # Removed, not accepted by UnifiedTFN
         kernel_type=args.kernel_type,
         evolution_type=args.evolution_type,
         grid_size=args.grid_size,
         time_steps=args.time_steps,
         dropout=args.dropout,
-    ).to(device)
+        task="classification",  # Added to satisfy UnifiedTFN
+        device=device,
+    )
     print(f"Model parameters: {sum(p.numel() for p in model.parameters()):,}")
 
     # Training setup

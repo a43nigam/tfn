@@ -39,6 +39,7 @@ from torch.utils.data import DataLoader, TensorDataset
 # Local imports
 from tfn.model.tfn_classifiers import TFNClassifier
 import tfn.tfn_datasets.arxiv_loader as al
+from tfn.model.registry import validate_kernel_evolution
 
 # -----------------------------------------------------------------------------
 # Utility functions
@@ -157,7 +158,7 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--kernel_type", type=str, default="rbf",
                    choices=["rbf", "compact", "fourier"])
     p.add_argument("--evolution_type", type=str, default="cnn",
-                   choices=["cnn", "spectral", "pde"])
+                   choices=["cnn", "pde"])
     p.add_argument("--grid_size", type=int, default=64)
     p.add_argument("--time_steps", type=int, default=3)
     p.add_argument("--dropout", type=float, default=0.1)
@@ -183,6 +184,12 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
 
+    try:
+        validate_kernel_evolution(args.kernel_type, args.evolution_type)
+    except ValueError as e:
+        print(f"[ConfigError] {e}")
+        return
+
     device = _prepare_device(args.device)
 
     # Dataloaders
@@ -200,6 +207,7 @@ def main() -> None:
         grid_size=args.grid_size,
         time_steps=args.time_steps,
         dropout=args.dropout,
+        task="classification"
     ).to(device)
     print(f"Model parameters: {sum(p.numel() for p in model.parameters()):,}")
 

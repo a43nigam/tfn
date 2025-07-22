@@ -45,12 +45,12 @@ import torch.nn as nn
 
 # Local imports -------------------------------------------------------------
 try:
-    from tfn_datasets.long_text_loader import create_long_text_dataloader
-    from model.tfn_base import TrainableTFNLayer
-    from model.seq_baselines import (
+    from tfn.tfn_datasets.long_text_loader import create_long_text_dataloader
+    from tfn.model.tfn_base import TrainableTFNLayer
+    from tfn.model.seq_baselines import (
         SimplePerformerSeqModel,
     )
-    from core.grid_utils import compute_auto_grid_size
+    from tfn.core.grid_utils import compute_auto_grid_size
 except ImportError as e:
     print(f"Import error: {e}")
     print("Current sys.path:", sys.path)

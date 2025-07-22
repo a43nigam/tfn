@@ -16,7 +16,7 @@ from .kernels import (
 )
 from .field_projection import FieldProjector, UniformFieldGrid
 from .field_evolution import (
-    FieldEvolver, CNNFieldEvolver, SpectralFieldEvolver, 
+    FieldEvolver, CNNFieldEvolver, 
     PDEFieldEvolver, TemporalGrid, create_field_evolver
 )
 from .field_interference import (
@@ -42,6 +42,6 @@ __all__ = [
     # Field projection
     'FieldProjector', 'UniformFieldGrid',
     # Field evolution
-    'FieldEvolver', 'CNNFieldEvolver', 'SpectralFieldEvolver', 
+    'FieldEvolver', 'CNNFieldEvolver', 
     'PDEFieldEvolver', 'TemporalGrid', 'create_field_evolver'
 ] 

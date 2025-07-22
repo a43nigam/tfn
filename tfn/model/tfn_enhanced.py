@@ -12,12 +12,12 @@ import torch.nn.functional as F
 from typing import Optional, Tuple, Dict, Any
 import math
 
-from ..core.field_projection import FieldProjector
-from ..core.field_evolution import FieldEvolver
-from ..core.field_sampling import FieldSampler
-from ..core.field_interference import TokenFieldInterference, create_field_interference
-from ..core.dynamic_propagation import DynamicFieldPropagator, create_field_propagator
-from ..core.interaction_operators import FieldInteractionOperators, create_interaction_operators
+from tfn.core.field_projection import FieldProjector
+from tfn.core.field_evolution import FieldEvolver
+from tfn.core.field_sampling import FieldSampler
+from tfn.core.field_interference import TokenFieldInterference, create_field_interference
+from tfn.core.dynamic_propagation import DynamicFieldPropagator, create_field_propagator
+from tfn.core.interaction_operators import FieldInteractionOperators, create_interaction_operators
 
 
 class EnhancedTFNLayer(nn.Module):

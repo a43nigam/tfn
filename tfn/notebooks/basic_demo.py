@@ -15,7 +15,7 @@ from typing import List, Tuple, Dict
 # Import TFN components
 from tfn.core import (
     FieldProjector, UniformFieldGrid, 
-    FieldEvolver, CNNFieldEvolver, SpectralFieldEvolver, PDEFieldEvolver,
+    FieldEvolver, CNNFieldEvolver, PDEFieldEvolver,
     RBFKernel, CompactKernel, FourierKernel
 )
 
@@ -128,7 +128,6 @@ def test_evolution_methods(initial_field: torch.Tensor,
     """Test different evolution methods."""
     evolvers = {
         'CNN': CNNFieldEvolver(embed_dim=embed_dim, pos_dim=1),
-        'Spectral': SpectralFieldEvolver(embed_dim=embed_dim, pos_dim=1),
         'PDE (Diffusion)': PDEFieldEvolver(embed_dim=embed_dim, pos_dim=1, pde_type="diffusion")
     }
     

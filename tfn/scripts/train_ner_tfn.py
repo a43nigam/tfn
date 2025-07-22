@@ -18,6 +18,7 @@ from tfn.model.tfn_base import TrainableTFNLayer  # 1-D layer
 import tfn.tfn_datasets.ner_loader as nl                          # load_conll2003
 from tfn.model.tfn_2d import TrainableTFNLayer2D  # 2-D layer
 from tfn.model.tfn_enhanced import create_enhanced_tfn_model  # Enhanced TFN
+from tfn.model.registry import validate_kernel_evolution
 
 # -----------------------------------------------------------------------------
 class TFNTagger(nn.Module):
@@ -162,7 +163,7 @@ def parse_args() -> argparse.Namespace:
                    choices=["rbf", "compact", "fourier"],
                    help="Kernel type for field projection")
     p.add_argument("--evolution_type", type=str, default="cnn",
-                   choices=["cnn", "spectral", "pde"],
+                   choices=["cnn", "pde"],
                    help="Evolution type for field dynamics")
     p.add_argument("--time_steps", type=int, default=3,
                    help="Number of evolution time steps")
@@ -238,6 +239,13 @@ def eval_epoch(model, loader, criterion, device):
 
 def main():
     args = parse_args()
+
+    try:
+        validate_kernel_evolution(args.kernel_type, args.evolution_type)
+    except ValueError as e:
+        print(f"[ConfigError] {e}")
+        return
+
     device = torch.device(args.device)
 
     train_ds, val_ds, test_ds, vocab_size, num_tags = nl.load_conll2003()

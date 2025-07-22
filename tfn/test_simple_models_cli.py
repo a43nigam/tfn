@@ -17,8 +17,8 @@ sys.path.insert(0, os.path.dirname(__file__))
 def test_simple_models(args):
     """Test simple model creation and forward pass with parameters."""
     try:
-        from model.tfn_base import TrainableTFNLayer
-        from model.seq_baselines import SimpleTransformerSeqModel, SimplePerformerSeqModel
+        from tfn.model.tfn_base import TrainableTFNLayer
+        from tfn.model.seq_baselines import SimpleTransformerSeqModel, SimplePerformerSeqModel
         
         print("Testing simple models...")
         

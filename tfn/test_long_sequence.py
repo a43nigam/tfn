@@ -17,8 +17,8 @@ def test_long_sequence_efficiency():
     """Test long-sequence efficiency on PG-19."""
     try:
         from datasets.pg19_loader import create_pg19_dataloader, measure_memory_usage
-        from model.seq_baselines import SimpleTransformerSeqModel, SimplePerformerSeqModel
-        from model.tfn_base import TrainableTFNLayer
+        from tfn.model.seq_baselines import SimpleTransformerSeqModel, SimplePerformerSeqModel
+        from tfn.model.tfn_base import TrainableTFNLayer
         
         print("Testing long-sequence efficiency...")
         
