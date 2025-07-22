@@ -17,205 +17,87 @@ from tfn.core.field_evolution import FieldEvolver, DynamicFieldPropagator, creat
 from tfn.core.field_sampling import FieldSampler
 from tfn.core.field_interference import TokenFieldInterference, create_field_interference
 from tfn.core.interaction_operators import FieldInteractionOperators, create_interaction_operators
+from tfn.core.unified_field_dynamics import UnifiedFieldDynamics
 
 
 class EnhancedTFNLayer(nn.Module):
     """
-    Enhanced TFN Layer with Field Interference Mechanisms.
-    
-    Integrates token-centric field interference with existing TFN components
-    to provide a complete field-based attention mechanism.
-    
-    Mathematical formulation:
-        F(z) = Σᵢ Eᵢ ⊗ Kᵢ(z, μᵢ, θᵢ)  # Field projection
-        F'(z) = I(F(z))                   # Field interference
-        F''(z) = P(F'(z))                 # Field propagation
-        E'_i = S(F''(z), μᵢ)              # Field sampling
+    Enhanced TFN Layer using Unified Field Dynamics.
+    Integrates field projection, unified field dynamics (evolution + interference + constraints), and field sampling.
     """
-    
     def __init__(self, 
                  embed_dim: int,
                  pos_dim: int = 1,
                  kernel_type: str = "rbf",
                  evolution_type: str = "diffusion",
                  interference_type: str = "standard",
-                 propagator_type: str = "standard",
-                 operator_type: str = "standard",
                  grid_size: int = 100,
-                 num_heads: int = 8,
+                 num_steps: int = 4,
+                 dt: float = 0.01,
                  dropout: float = 0.1,
                  layer_norm_eps: float = 1e-5):
-        """
-        Initialize enhanced TFN layer.
-        
-        Args:
-            embed_dim: Dimension of token embeddings
-            pos_dim: Dimension of position space
-            kernel_type: Type of kernel for field projection
-            evolution_type: Type of evolution for field evolution
-            interference_type: Type of interference ("standard", "causal", "multiscale", "physics")
-            propagator_type: Type of propagator ("standard", "adaptive", "causal")
-            operator_type: Type of interaction operator ("standard", "fractal", "causal", "meta")
-            grid_size: Number of grid points for field evaluation
-            num_heads: Number of attention/interference heads
-            dropout: Dropout rate for regularization
-            layer_norm_eps: Layer normalization epsilon
-        """
         super().__init__()
         self.embed_dim = embed_dim
         self.pos_dim = pos_dim
         self.grid_size = grid_size
-        self.num_heads = num_heads
-        
-        # Field projection (existing TFN component)
+        # Field projection
         self.field_projector = FieldProjector(
             embed_dim=embed_dim,
             pos_dim=pos_dim,
             kernel_type=kernel_type
         )
-        
-        # Field interference (new component)
-        self.field_interference = create_field_interference(
-            interference_type=interference_type,
-            embed_dim=embed_dim,
-            num_heads=num_heads,
-            dropout=dropout
-        )
-        
-        # Dynamic field propagation (new component)
-        self.field_propagator = create_field_evolver(
-            propagator_type=propagator_type,
+        # Unified field dynamics
+        self.unified_dynamics = UnifiedFieldDynamics(
             embed_dim=embed_dim,
             pos_dim=pos_dim,
             evolution_type=evolution_type,
             interference_type=interference_type,
+            num_steps=num_steps,
+            dt=dt,
             dropout=dropout
         )
-        
-        # Field interaction operators (new component)
-        self.interaction_operators = create_interaction_operators(
-            operator_type=operator_type,
-            embed_dim=embed_dim,
-            num_heads=num_heads,
-            dropout=dropout
-        )
-        
-        # Field evolution (existing TFN component)
-        if evolution_type in ["diffusion", "wave"]:
-            # Use PDE evolver for diffusion/wave evolution
-            self.field_evolver = FieldEvolver(
-                embed_dim=embed_dim,
-                pos_dim=pos_dim,
-                evolution_type="pde"
-            )
-        else:
-            # Use other evolution types directly
-            self.field_evolver = FieldEvolver(
-                embed_dim=embed_dim,
-                pos_dim=pos_dim,
-                evolution_type=evolution_type
-            )
-        
-        # Field sampling (existing TFN component)
+        # Field sampling
         self.field_sampler = FieldSampler(mode='linear')
-        
         # Layer normalization
         self.layer_norm1 = nn.LayerNorm(embed_dim, eps=layer_norm_eps)
         self.layer_norm2 = nn.LayerNorm(embed_dim, eps=layer_norm_eps)
-        
         # Output projection
         self.output_proj = nn.Linear(embed_dim, embed_dim)
         self.dropout = nn.Dropout(dropout)
-        
     def forward(self, 
                 embeddings: torch.Tensor,      # [B, N, D] token embeddings
                 positions: torch.Tensor,       # [B, N, P] token positions
                 grid_points: Optional[torch.Tensor] = None) -> torch.Tensor:
-        """
-        Forward pass through enhanced TFN layer.
-        
-        Args:
-            embeddings: Token embeddings [B, N, D]
-            positions: Token positions [B, N, P]
-            grid_points: Grid points for field evaluation [M, P] or [B, M, P] (optional)
-            
-        Returns:
-            Enhanced token embeddings [B, N, D]
-        """
         batch_size, num_tokens, embed_dim = embeddings.shape
-        
-        # Generate grid points if not provided
         if grid_points is None:
             grid_points = self._generate_grid_points(batch_size)
-        
         # Step 1: Field Projection
-        # F(z) = Σᵢ Eᵢ ⊗ Kᵢ(z, μᵢ, θᵢ)
         field = self.field_projector(embeddings, positions, grid_points)  # [B, M, D]
-        
-        # Step 2: Field Interference
-        # F'(z) = I(F(z))
-        field_interfered = self.field_interference(field, grid_points)  # [B, M, D]
-        
-        # Step 3: Dynamic Field Propagation
-        # F''(z) = P(F'(z))
-        field_propagated = self.field_propagator(field_interfered, grid_points)  # [B, M, D]
-        
-        # Step 4: Field Interaction Operators
-        # F'''(z) = O(F''(z))
-        field_operated = self.interaction_operators(field_propagated, grid_points)  # [B, M, D]
-        
-        # Step 5: Field Evolution (optional, for additional dynamics)
-        # F''''(z) = E(F'''(z))
-        field_evolved = self.field_evolver(field_operated, grid_points)  # [B, M, D]
-        
-        # Step 6: Field Sampling
-        # E'_i = S(F''''(z), μᵢ)
+        # Step 2: Unified Field Dynamics (evolution + interference + constraints)
+        field_evolved = self.unified_dynamics(field, positions)
+        # Step 3: Field Sampling
         enhanced_embeddings = self.field_sampler(field_evolved, grid_points, positions)  # [B, N, D]
-        
         # Residual connection and layer normalization
         enhanced_embeddings = self.layer_norm1(enhanced_embeddings + embeddings)
-        
         # Output projection
         output = self.output_proj(enhanced_embeddings)
         output = self.dropout(output)
-        
         # Final layer normalization
         output = self.layer_norm2(output + enhanced_embeddings)
-        
         return output
-    
     def _generate_grid_points(self, batch_size: int) -> torch.Tensor:
-        """Generate uniform grid points for field evaluation."""
         if self.pos_dim == 1:
-            # 1D grid
             grid = torch.linspace(0.0, 1.0, self.grid_size, device=next(self.parameters()).device)
-            grid = grid.unsqueeze(-1)  # [grid_size, 1]
+            grid = grid.unsqueeze(-1)
         else:
-            # Multi-dimensional grid
             grid_points_per_dim = int(self.grid_size ** (1.0 / self.pos_dim))
             grid_ranges = [torch.linspace(0.0, 1.0, grid_points_per_dim) for _ in range(self.pos_dim)]
             grid = torch.meshgrid(*grid_ranges, indexing='ij')
             grid = torch.stack(grid, dim=-1).reshape(-1, self.pos_dim)
-        
-        # Add batch dimension
-        grid = grid.unsqueeze(0).expand(batch_size, -1, -1)  # [B, M, P]
-        
+        grid = grid.unsqueeze(0).expand(batch_size, -1, -1)
         return grid
-    
     def get_physics_constraints(self) -> Dict[str, torch.Tensor]:
-        """
-        Get physics constraint losses for regularization.
-        
-        Returns:
-            Dictionary of constraint losses
-        """
-        constraints = {}
-        
-        # Get constraints from physics-constrained interference
-        if hasattr(self.field_interference, 'get_constraint_loss'):
-            constraints['interference_constraints'] = self.field_interference.get_constraint_loss()
-        
-        return constraints
+        return self.unified_dynamics.get_physics_constraints()
 
 
 class EnhancedTFNModel(nn.Module):
@@ -278,10 +160,9 @@ class EnhancedTFNModel(nn.Module):
                 kernel_type=kernel_type,
                 evolution_type=evolution_type,
                 interference_type=interference_type,
-                propagator_type=propagator_type,
-                operator_type=operator_type,
                 grid_size=grid_size,
-                num_heads=num_heads,
+                num_steps=4, # Default for UnifiedFieldDynamics
+                dt=0.01, # Default for UnifiedFieldDynamics
                 dropout=dropout
             )
             for _ in range(num_layers)
