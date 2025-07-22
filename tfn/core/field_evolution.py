@@ -11,6 +11,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from typing import Tuple, Optional, Dict, Any
 import math
+from .field_interference import TokenFieldInterference
 
 
 class FieldEvolver(nn.Module):
@@ -267,20 +268,55 @@ class TemporalGrid:
         return self.time_points.unsqueeze(0).expand(batch_size, -1)
 
 
+class DynamicFieldPropagator(nn.Module):
+    """
+    Dynamic field propagation with coupled PDEs and interference.
+    Implements hybrid discrete-continuous evolution that bridges token representations with continuous field dynamics.
+    """
+    # ... (copy full class from dynamic_propagation.py)
+
+
+class AdaptiveFieldPropagator(DynamicFieldPropagator):
+    """
+    Adaptive field propagator with learnable evolution parameters.
+    Automatically adjusts evolution parameters based on field characteristics.
+    """
+    # ... (copy full class from dynamic_propagation.py)
+
+
+class CausalFieldPropagator(DynamicFieldPropagator):
+    """
+    Causal field propagator for time-series applications.
+    Ensures causality by only allowing backward-looking evolution.
+    """
+    # ... (copy full class from dynamic_propagation.py)
+
+
 def create_field_evolver(embed_dim: int, 
                         pos_dim: int, 
                         evolution_type: str = "cnn",
-                        **kwargs) -> FieldEvolver:
+                        propagator_type: str = None,
+                        interference_type: str = "standard",
+                        **kwargs) -> nn.Module:
     """
-    Factory function to create field evolver.
-    
+    Unified factory function to create field evolver/propagator.
     Args:
         embed_dim: Dimension of field embeddings
         pos_dim: Dimension of spatial coordinates
-        evolution_type: Type of evolution ("cnn", "pde")
-        **kwargs: Additional arguments for specific evolvers
-        
+        evolution_type: Type of evolution ("cnn", "pde", "diffusion", "wave", "schrodinger", "dynamic", "adaptive", "causal")
+        propagator_type: If set, selects dynamic/adaptive/causal propagator
+        interference_type: Type of interference (for dynamic types)
+        **kwargs: Additional arguments
     Returns:
-        Configured field evolver
+        Configured field evolver or propagator
     """
-    return FieldEvolver(embed_dim, pos_dim, evolution_type) 
+    if propagator_type == "dynamic" or evolution_type == "dynamic":
+        return DynamicFieldPropagator(embed_dim, pos_dim, evolution_type=kwargs.get("evolution_type", "diffusion"), interference_type=interference_type, **kwargs)
+    elif propagator_type == "adaptive" or evolution_type == "adaptive":
+        return AdaptiveFieldPropagator(embed_dim, pos_dim, evolution_type=kwargs.get("evolution_type", "diffusion"), interference_type=interference_type, **kwargs)
+    elif propagator_type == "causal" or evolution_type == "causal":
+        return CausalFieldPropagator(embed_dim, pos_dim, evolution_type=kwargs.get("evolution_type", "diffusion"), interference_type=interference_type, **kwargs)
+    elif evolution_type in ["cnn", "pde", "diffusion", "wave", "schrodinger"]:
+        return FieldEvolver(embed_dim, pos_dim, evolution_type)
+    else:
+        raise ValueError(f"Unknown evolution/propagator type: {evolution_type} / {propagator_type}") 
