@@ -391,6 +391,37 @@ def test_multi_scale_mechanisms():
     assert fractal_enhanced.shape == token_fields.shape
 
 
+def test_token_field_interference_gradient():
+    """Test that TokenFieldInterference is differentiable and gradients flow to input."""
+    embed_dim = 32
+    batch_size = 2
+    num_tokens = 8
+    x = torch.randn(batch_size, num_tokens, embed_dim, requires_grad=True)
+    module = TokenFieldInterference(embed_dim=embed_dim)
+    out = module(x)
+    loss = out.sum()
+    loss.backward()
+    assert x.grad is not None, "Gradient did not flow to input!"
+    assert torch.isfinite(x.grad).all(), "Gradient contains non-finite values!"
+    print("\u2705 TokenFieldInterference gradient flow test passed.")
+
+def test_dynamic_field_propagator_gradient():
+    """Test that DynamicFieldPropagator is differentiable and gradients flow to input."""
+    embed_dim = 32
+    pos_dim = 1
+    batch_size = 2
+    num_tokens = 8
+    x = torch.randn(batch_size, num_tokens, embed_dim, requires_grad=True)
+    positions = torch.rand(batch_size, num_tokens, pos_dim)
+    module = DynamicFieldPropagator(embed_dim=embed_dim, pos_dim=pos_dim)
+    out = module(x, positions)
+    loss = out.sum()
+    loss.backward()
+    assert x.grad is not None, "Gradient did not flow to input!"
+    assert torch.isfinite(x.grad).all(), "Gradient contains non-finite values!"
+    print("\u2705 DynamicFieldPropagator gradient flow test passed.")
+
+
 def run_comprehensive_tests():
     """Run all comprehensive tests."""
     print("🚀 Starting Comprehensive Field Interference Tests")
