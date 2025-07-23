@@ -166,7 +166,7 @@ MODEL_REGISTRY = {
     # ============================================================================
     
     'enhanced_tfn_classifier': {
-        'class': EnhancedTFNClassifier,
+        'class': EnhancedTFNModel,
         'task_type': 'classification',
         'evolution_types': ['diffusion', 'wave', 'schrodinger', 'cnn'],
         'components': ['field_projection', 'field_interference', 'field_propagation', 'field_operators', 'field_evolution', 'field_sampling'],

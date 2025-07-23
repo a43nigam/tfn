@@ -50,7 +50,7 @@ _DATASET_REGISTRY: Dict[str, Callable[..., Any]] = {
     "imdb": dataset_loaders.load_imdb,
     "arxiv": arxiv_loader.load_arxiv if hasattr(arxiv_loader, "load_arxiv") else None,
     # ----------------------- long text / language modelling ---------------------
-    "pg19": pg19_loader.create_pg19_dataloaders if hasattr(pg19_loader, "create_pg19_dataloaders") else None,
+    "pg19": pg19_loader.create_pg19_dataloader if hasattr(pg19_loader, "create_pg19_dataloader") else None,
     "long_text_synth": long_text_loader.create_long_text_dataloader,
     # ----------------------- time-series ----------------------------------------
     "electricity": climate_loader.load_electricity if hasattr(climate_loader, "load_electricity") else None,

@@ -113,96 +113,51 @@ class TokenFieldInterference(nn.Module):
         
         return output
     
-    def _constructive_interference(self, 
-                                 fields: torch.Tensor) -> torch.Tensor:  # [B, N, H, D//H]
-        """Compute true constructive interference: |F_i + F_j|² - |F_i|² - |F_j|² = 2Re(F_i*F_j)"""
-        batch_size, num_tokens, num_heads, head_dim = fields.shape
-        
-        # Compute field magnitudes for individual tokens
-        field_magnitudes = torch.norm(fields, dim=-1, keepdim=True)  # [B, N, H, 1]
-        
-        # Compute pairwise field interactions
-        # [B, N, H, D//H] × [B, N, H, D//H] -> [B, N, N, H, D//H]
-        # Use outer product to get all token pairs
-        fields_expanded = fields.unsqueeze(2)  # [B, N, 1, H, D//H]
-        fields_transposed = fields.unsqueeze(1)  # [B, 1, N, H, D//H]
-        
-        # Compute complex conjugate product: F_i * F_j*
-        # For real fields, this is just F_i * F_j
-        field_pairs = fields_expanded * fields_transposed  # [B, N, N, H, D//H]
-        
-        # Apply field coupler to pairs
-        # Correct einsum: mix heads, preserve shape [B, N, N, H, D//H]
-        coupled_pairs = torch.einsum('bnmhd,hk->bnmkd', field_pairs, self.field_coupler)
-        
-        # Compute interference: 2Re(F_i*F_j)
-        # Sum over the coupling dimension and take real part
-        interference = 2 * torch.real(coupled_pairs.sum(dim=-1, keepdim=True))  # [B, N, N, H, 1]
-        
-        # Aggregate interference across all pairs for each token
-        # Sum over the second token dimension (j) to get total interference for each token i
-        total_interference = interference.sum(dim=2)  # [B, N, H, 1]
-        
-        return total_interference
+    def _constructive_interference(self, fields: torch.Tensor) -> torch.Tensor:
+        """Compute constructive interference efficiently (O(N)) using aggregated sums.
+
+        Instead of explicitly forming all O(N^2) token pairs, we exploit the identity
+            Σ_j 2 Re(F_i · F_j) = 2 Re(F_i · Σ_j F_j)
+        and incorporate the learnable head–mixing matrix `field_coupler`.
+        """
+        B, N, H, D_h = fields.shape
+
+        # Aggregate fields across all tokens once: Σ_j F_j
+        summed_fields = fields.sum(dim=1)  # [B, H, D_h]
+
+        # Mix heads via the coupler: Σ_k C_{h,k} Σ_j F_j^k
+        mixed_sum = torch.einsum('bkd,hk->bhd', summed_fields, self.field_coupler)  # [B, H, D_h]
+
+        # Dot-product between each token F_i^h and the mixed global vector
+        interference = 2 * torch.sum(fields * mixed_sum.unsqueeze(1), dim=-1, keepdim=True)  # [B, N, H, 1]
+
+        return interference
     
-    def _destructive_interference(self, 
-                                 fields: torch.Tensor) -> torch.Tensor:  # [B, N, H, D//H]
-        """Compute true destructive interference: |F_i - F_j|² - |F_i|² - |F_j|² = -2Re(F_i*F_j)"""
-        batch_size, num_tokens, num_heads, head_dim = fields.shape
-        
-        # Compute field magnitudes for individual tokens
-        field_magnitudes = torch.norm(fields, dim=-1, keepdim=True)  # [B, N, H, 1]
-        
-        # Compute pairwise field interactions (same as constructive but with negative sign)
-        fields_expanded = fields.unsqueeze(2)  # [B, N, 1, H, D//H]
-        fields_transposed = fields.unsqueeze(1)  # [B, 1, N, H, D//H]
-        
-        # Compute field pairs
-        field_pairs = fields_expanded * fields_transposed  # [B, N, N, H, D//H]
-        
-        # Apply field coupler to pairs
-        # Correct einsum: mix heads, preserve shape [B, N, N, H, D//H]
-        coupled_pairs = torch.einsum('bnmhd,hk->bnmkd', field_pairs, self.field_coupler)
-        
-        # Compute destructive interference: -2Re(F_i*F_j)
-        interference = -2 * torch.real(coupled_pairs.sum(dim=-1, keepdim=True))  # [B, N, N, H, 1]
-        
-        # Aggregate interference across all pairs for each token
-        total_interference = interference.sum(dim=2)  # [B, N, H, 1]
-        
-        return total_interference
+    def _destructive_interference(self, fields: torch.Tensor) -> torch.Tensor:
+        """Compute destructive interference efficiently as the negative of the constructive term."""
+        B, N, H, D_h = fields.shape
+
+        summed_fields = fields.sum(dim=1)  # [B, H, D_h]
+        mixed_sum = torch.einsum('bkd,hk->bhd', summed_fields, self.field_coupler)  # [B, H, D_h]
+
+        interference = -2 * torch.sum(fields * mixed_sum.unsqueeze(1), dim=-1, keepdim=True)  # [B, N, H, 1]
+
+        return interference
     
-    def _phase_interference(self, 
-                           fields: torch.Tensor) -> torch.Tensor:  # [B, N, H, D//H]
-        """Compute phase interference: Re(F_i*F_j) = |F_i||F_j|cos(θ_i - θ_j)"""
-        batch_size, num_tokens, num_heads, head_dim = fields.shape
-        
-        # Compute field magnitudes
-        field_magnitudes = torch.norm(fields, dim=-1, keepdim=True)  # [B, N, H, 1]
-        
-        # Compute pairwise field interactions
-        fields_expanded = fields.unsqueeze(2)  # [B, N, 1, H, D//H]
-        fields_transposed = fields.unsqueeze(1)  # [B, 1, N, H, D//H]
-        
-        # Compute field pairs
-        field_pairs = fields_expanded * fields_transposed  # [B, N, N, H, D//H]
-        
-        # Apply field coupler to pairs
-        # Correct einsum: mix heads, preserve shape [B, N, N, H, D//H]
-        coupled_pairs = torch.einsum('bnmhd,hk->bnmkd', field_pairs, self.field_coupler)
-        
-        # Compute phase interference: Re(F_i*F_j)
-        interference = torch.real(coupled_pairs.sum(dim=-1, keepdim=True))  # [B, N, N, H, 1]
-        
-        # Normalize by field magnitudes to get cosine term
-        # |F_i||F_j|cos(θ_i - θ_j) = Re(F_i*F_j)
-        magnitude_pairs = field_magnitudes.unsqueeze(2) * field_magnitudes.unsqueeze(1)  # [B, N, N, H, 1]
-        normalized_interference = interference / (magnitude_pairs + 1e-8)
-        
-        # Aggregate interference across all pairs for each token
-        total_interference = normalized_interference.sum(dim=2)  # [B, N, H, 1]
-        
-        return total_interference
+    def _phase_interference(self, fields: torch.Tensor) -> torch.Tensor:
+        """Compute phase interference (cosine of phase difference) in linear time."""
+        B, N, H, D_h = fields.shape
+
+        # Normalise fields to unit magnitude per-token
+        norm = torch.norm(fields, dim=-1, keepdim=True) + 1e-8
+        unit_fields = fields / norm  # [B, N, H, D_h]
+
+        summed_units = unit_fields.sum(dim=1)  # [B, H, D_h]
+        mixed_sum = torch.einsum('bkd,hk->bhd', summed_units, self.field_coupler)  # [B, H, D_h]
+
+        interference = torch.sum(unit_fields * mixed_sum.unsqueeze(1), dim=-1, keepdim=True)  # [B, N, H, 1]
+
+        return interference
 
 
 class CausalFieldInterference(TokenFieldInterference):
