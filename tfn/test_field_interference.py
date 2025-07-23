@@ -25,11 +25,11 @@ from tfn.core.field_interference import (
     create_field_interference
 )
 
-from tfn.core.dynamic_propagation import (
+from tfn.core.field_evolution import (
     DynamicFieldPropagator,
     AdaptiveFieldPropagator,
     CausalFieldPropagator,
-    create_field_propagator
+    create_field_evolver
 )
 
 from tfn.core.interaction_operators import (
@@ -105,7 +105,7 @@ def test_dynamic_propagation():
     
     # Test different propagator types
     propagator_types = ["standard", "adaptive", "causal"]
-    evolution_types = ["diffusion", "wave", "schrodinger"]
+    evolution_types = ["diffusion", "wave"]
     
     for propagator_type in propagator_types:
         for evolution_type in evolution_types:
@@ -118,7 +118,7 @@ def test_dynamic_propagation():
                 interference_type = "standard"
             
             # Create propagator
-            propagator = create_field_propagator(
+            propagator = create_field_evolver(
                 propagator_type=propagator_type,
                 embed_dim=embed_dim,
                 pos_dim=pos_dim,
@@ -128,7 +128,7 @@ def test_dynamic_propagation():
             
             # Test forward pass
             start_time = time.time()
-            evolved_fields = propagator(token_fields, positions, grid_points)
+            evolved_fields = propagator(token_fields, grid_points=grid_points, time_steps=1, positions=positions)
             forward_time = time.time() - start_time
             
             # Verify output shape

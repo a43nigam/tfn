@@ -132,4 +132,4 @@ def test_simple_models(args):
         
     except Exception as e:
         print(f"✗ Simple models test failed: {e}")
-        return {"error": str(e)} 
+        return {"error": str(e)}

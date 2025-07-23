@@ -37,8 +37,13 @@ class FieldEvolver(nn.Module):
         
         if evolution_type == "cnn":
             self.evolver = CNNFieldEvolver(embed_dim, pos_dim)
-        elif evolution_type == "pde":
-            self.evolver = PDEFieldEvolver(embed_dim, pos_dim)
+        elif evolution_type in ["pde", "diffusion", "wave", "schrodinger"]:
+            # Map all PDE-like types to PDEFieldEvolver with correct pde_type
+            if evolution_type == "pde":
+                pde_type = "diffusion"  # default
+            else:
+                pde_type = evolution_type
+            self.evolver = PDEFieldEvolver(embed_dim, pos_dim, pde_type=pde_type)
         else:
             raise ValueError(f"Unknown evolution type: {evolution_type}")
     
@@ -145,19 +150,9 @@ class PDEFieldEvolver(nn.Module):
                 time_steps: int = 1,
                 dt: float = 0.01,
                 **kwargs) -> torch.Tensor:
-        """
-        Evolve field using PDE methods.
-        
-        Args:
-            field: Initial field [B, M, D]
-            grid_points: Spatial grid points [B, M, P]
-            time_steps: Number of time steps
-            dt: Time step size
-            **kwargs: Additional arguments
-            
-        Returns:
-            Evolved field [B, M, D]
-        """
+        # Ensure time_steps is an int
+        if isinstance(time_steps, torch.Tensor):
+            time_steps = int(time_steps.item())
         if self.pde_type == "diffusion":
             return self._diffusion_evolution(field, grid_points, time_steps, dt)
         elif self.pde_type == "wave":
@@ -169,7 +164,9 @@ class PDEFieldEvolver(nn.Module):
                            grid_points: torch.Tensor,
                            time_steps: int,
                            dt: float) -> torch.Tensor:
-        """Evolve field using diffusion equation."""
+        # Ensure time_steps is an int
+        if isinstance(time_steps, torch.Tensor):
+            time_steps = int(time_steps.item())
         batch_size, num_points, embed_dim = field.shape
         
         # Get spatial spacing
@@ -203,7 +200,9 @@ class PDEFieldEvolver(nn.Module):
                        grid_points: torch.Tensor,
                        time_steps: int,
                        dt: float) -> torch.Tensor:
-        """Evolve field using wave equation."""
+        # Ensure time_steps is an int
+        if isinstance(time_steps, torch.Tensor):
+            time_steps = int(time_steps.item())
         batch_size, num_points, embed_dim = field.shape
         
         # Get spatial spacing
@@ -281,7 +280,16 @@ class AdaptiveFieldPropagator(DynamicFieldPropagator):
     Adaptive field propagator with learnable evolution parameters.
     Automatically adjusts evolution parameters based on field characteristics.
     """
-    # ... (copy full class from dynamic_propagation.py)
+    def __init__(self, 
+                 embed_dim: int,
+                 pos_dim: int,
+                 evolution_type: str = "diffusion",
+                 interference_type: str = "standard",
+                 num_steps: int = 4,
+                 dt: float = 0.01,
+                 interference_weight: float = 0.5,
+                 dropout: float = 0.1):
+        super().__init__(embed_dim, pos_dim, evolution_type, interference_type, num_steps, dt, interference_weight, dropout)
 
 
 class CausalFieldPropagator(DynamicFieldPropagator):
@@ -289,7 +297,16 @@ class CausalFieldPropagator(DynamicFieldPropagator):
     Causal field propagator for time-series applications.
     Ensures causality by only allowing backward-looking evolution.
     """
-    # ... (copy full class from dynamic_propagation.py)
+    def __init__(self, 
+                 embed_dim: int,
+                 pos_dim: int,
+                 evolution_type: str = "diffusion",
+                 interference_type: str = "causal",
+                 num_steps: int = 4,
+                 dt: float = 0.01,
+                 interference_weight: float = 0.5,
+                 dropout: float = 0.1):
+        super().__init__(embed_dim, pos_dim, evolution_type, interference_type, num_steps, dt, interference_weight, dropout)
 
 
 def create_field_evolver(embed_dim: int, 
