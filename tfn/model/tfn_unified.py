@@ -182,9 +182,17 @@ class TFN(nn.Module):
             positions = torch.linspace(0.1, 0.9, N, device=inputs.device)
             positions = positions.unsqueeze(0).unsqueeze(-1).expand(B, -1, -1)
 
+        # ------------------------------------------------------------------
+        # Add position embeddings ONCE before the TFN stack
+        # ------------------------------------------------------------------
+        if self.tfn_layers:
+            pos_emb = self.tfn_layers[0].pos_embeddings(positions)
+            x = x + pos_emb
+
         # TFN layers ------------------------------------------------------------
         for layer in self.tfn_layers:
-            x = layer(x, positions)
+            # Skip internal positional addition to avoid double-counting
+            x = layer(x, positions, add_pos_emb=False)
 
         # Global average pooling (sequence → vector) ----------------------------
         pooled = x.mean(dim=1)

@@ -35,6 +35,9 @@ class EnhancedTFNLayer(nn.Module):
                  num_steps: int = 4,
                  dt: float = 0.01,
                  dropout: float = 0.1,
+                 *,
+                 use_physics_constraints: bool = False,
+                 constraint_weight: float = 0.1,
                  layer_norm_eps: float = 1e-5):
         super().__init__()
         self.embed_dim = embed_dim
@@ -47,6 +50,7 @@ class EnhancedTFNLayer(nn.Module):
             kernel_type=kernel_type
         )
         # Unified field dynamics
+        effective_constraint_weight = constraint_weight if use_physics_constraints else 0.0
         self.unified_dynamics = UnifiedFieldDynamics(
             embed_dim=embed_dim,
             pos_dim=pos_dim,
@@ -54,6 +58,7 @@ class EnhancedTFNLayer(nn.Module):
             interference_type=interference_type,
             num_steps=num_steps,
             dt=dt,
+            constraint_weight=effective_constraint_weight,
             dropout=dropout
         )
         # Field sampling
@@ -121,6 +126,9 @@ class EnhancedTFNModel(nn.Module):
                  grid_size: int = 100,
                  num_heads: int = 8,
                  dropout: float = 0.1,
+                 *,
+                 use_physics_constraints: bool = False,
+                 constraint_weight: float = 0.1,
                  max_seq_len: int = 512):
         """
         Initialize enhanced TFN model.
@@ -161,9 +169,11 @@ class EnhancedTFNModel(nn.Module):
                 evolution_type=evolution_type,
                 interference_type=interference_type,
                 grid_size=grid_size,
-                num_steps=4, # Default for UnifiedFieldDynamics
-                dt=0.01, # Default for UnifiedFieldDynamics
-                dropout=dropout
+                num_steps=4,  # Default for UnifiedFieldDynamics
+                dt=0.01,  # Default for UnifiedFieldDynamics
+                dropout=dropout,
+                use_physics_constraints=use_physics_constraints,
+                constraint_weight=constraint_weight
             )
             for _ in range(num_layers)
         ])

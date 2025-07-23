@@ -17,11 +17,12 @@ import sys
 import argparse
 from types import SimpleNamespace
 from pathlib import Path
-from typing import Dict, Any
+from typing import Dict, Any, Union
 import math
 
 import torch
 import inspect
+from tfn.utils.metrics import accuracy
 
 # Import dynamic registries -----------------------------------------------------
 from tfn.model.registry import (
@@ -91,12 +92,17 @@ def train_and_evaluate(
     else:
         criterion = torch.nn.MSELoss()
 
-    history: Dict[str, list[float]] = {"train_loss": [], "val_loss": []}
+    history: Dict[str, list[float]] = {"train_loss": [], "val_loss": [], "train_acc": [], "val_acc": []}
 
     for epoch in range(1, epochs + 1):
+        # Print current learning rate at the start of the epoch
+        current_lr = optimizer.param_groups[0]['lr']
+        print(f"--- Epoch {epoch}/{epochs} | Learning rate: {current_lr:.6g} ---")
         # ------------------------- train ----------------------------------
         model.train()
         total = 0.0
+        correct = 0.0
+        total_samples = 0
         for batch in train_loader:
             optimizer.zero_grad()
 
@@ -104,18 +110,27 @@ def train_and_evaluate(
                 x, y = batch
                 logits = model(x.to(device))
                 loss = criterion(logits, y.to(device))
+                acc = accuracy(logits, y.to(device))
+                correct += acc * y.size(0)
+                total_samples += y.size(0)
             elif task in {"regression", "time_series"}:
                 x, y = batch
                 preds = model(x.to(device))
                 loss = criterion(preds, y.to(device))
+                acc = None  # Not applicable
             elif task == "language_modeling":
                 x, targets = batch
                 logits = model(x.to(device))
                 loss = criterion(logits.view(-1, logits.size(-1)), targets.view(-1).to(device))
+                acc = None  # Not applicable
             elif task == "ner":
                 x, tags = batch
                 logits = model(x.to(device))
                 loss = criterion(logits.view(-1, logits.size(-1)), tags.view(-1).to(device))
+                # Flatten for token-level accuracy
+                acc = accuracy(logits.view(-1, logits.size(-1)), tags.view(-1).to(device))
+                correct += acc * tags.numel()
+                total_samples += tags.numel()
             else:
                 raise ValueError(f"Unsupported task: {task}")
 
@@ -128,43 +143,107 @@ def train_and_evaluate(
             scheduler.step()
             total += loss.item()
         train_loss = total / max(1, len(train_loader))
+        if task in {"classification", "ner"}:
+            train_acc = correct / max(1, total_samples)
+        else:
+            train_acc = None
         history["train_loss"].append(train_loss)
+        history["train_acc"].append(train_acc)
 
         # ------------------------- validation -----------------------------
         model.eval()
         total_val = 0.0
+        correct_val = 0.0
+        total_val_samples = 0
         with torch.no_grad():
             for batch in val_loader:
                 if task == "classification":
                     x, y = batch
                     logits = model(x.to(device))
                     loss = criterion(logits, y.to(device))
+                    acc = accuracy(logits, y.to(device))
+                    correct_val += acc * y.size(0)
+                    total_val_samples += y.size(0)
                 elif task in {"regression", "time_series"}:
                     x, y = batch
                     preds = model(x.to(device))
                     loss = criterion(preds, y.to(device))
+                    acc = None
                 elif task == "language_modeling":
                     x, targets = batch
                     logits = model(x.to(device))
                     loss = criterion(logits.view(-1, logits.size(-1)), targets.view(-1).to(device))
+                    acc = None
                 elif task == "ner":
                     x, tags = batch
                     logits = model(x.to(device))
                     loss = criterion(logits.view(-1, logits.size(-1)), tags.view(-1).to(device))
+                    acc = accuracy(logits.view(-1, logits.size(-1)), tags.view(-1).to(device))
+                    correct_val += acc * tags.numel()
+                    total_val_samples += tags.numel()
                 else:
                     raise ValueError(f"Unsupported task: {task}")
                 total_val += loss.item()
         val_loss = total_val / max(1, len(val_loader))
+        if task in {"classification", "ner"}:
+            val_acc = correct_val / max(1, total_val_samples)
+        else:
+            val_acc = None
         history["val_loss"].append(val_loss)
+        history["val_acc"].append(val_acc)
 
-        print(f"Epoch {epoch:02d}/{epochs} | train {train_loss:.4f} | val {val_loss:.4f}")
+        print(f"Epoch {epoch:02d}/{epochs} | train {train_loss:.4f} | val {val_loss:.4f} | train_acc {train_acc if train_acc is not None else 'NA':.4f} | val_acc {val_acc if val_acc is not None else 'NA':.4f}")
 
     return {
         "history": history,
         "final_train_loss": history["train_loss"][-1],
         "final_val_loss": history["val_loss"][-1],
+        "final_train_acc": history["train_acc"][-1],
+        "final_val_acc": history["val_acc"][-1],
     }
 
+
+# -----------------------------------------------------------------------------
+# Utility helpers --------------------------------------------------------------
+# -----------------------------------------------------------------------------
+
+
+def _infer_arg_type(param_name: str, model_cls: type) -> type:
+    """Infer CLI argument type for *param_name* based on *model_cls* signature.
+
+    Falls back to ``str`` when type cannot be determined reliably.
+    """
+    try:
+        # Resolve type hints (handles PEP 563 "string" annotations)
+        from typing import get_type_hints
+
+        type_hints = get_type_hints(model_cls.__init__, localns=model_cls.__dict__)
+
+        ann = type_hints.get(param_name)
+        if ann is None:  # Fallback to raw signature annotation
+            sig = inspect.signature(model_cls.__init__)
+            if param_name in sig.parameters:
+                ann = sig.parameters[param_name].annotation
+
+        # ------------------------------------------------------------------
+        # Basic primitive types
+        # ------------------------------------------------------------------
+        if ann in {int, float, bool, str}:
+            return ann
+        # Handle Optional annotations like Optional[int]
+        from typing import get_origin, get_args
+
+        origin = get_origin(ann)
+        if origin is None:
+            return str
+        if origin is Union:  # type: ignore[name-defined]
+            # Return first non-None arg if it's simple
+            for arg in get_args(ann):
+                if arg is not type(None) and arg in {int, float, bool, str}:
+                    return arg
+    except Exception:
+        pass  # Robust fallback – treat as str on any failure
+    return str
 
 # -----------------------------------------------------------------------------
 # CLI -------------------------------------------------------------------------
@@ -255,7 +334,9 @@ def main(argv: list[str] | None = None):
         if default_val is not None:
             parser.add_argument(opt, default=default_val, type=type(default_val))
         else:
-            parser.add_argument(opt, required=True)
+            # Infer type from model signature; default to str if unknown
+            inferred_type = _infer_arg_type(param, m_cfg["class"])
+            parser.add_argument(opt, required=True, type=inferred_type)
 
         _existing_opts.add(opt)
     for param in model_optional:
@@ -268,7 +349,9 @@ def main(argv: list[str] | None = None):
         if param not in {"task", "dataset", "model", "epochs", "batch_size", "lr", "device", "num_workers", "dry_run"}:
             opt = f"--{param}"
             if opt not in _existing_opts:
-                parser.add_argument(opt, required=True)
+                # Infer type for dataset-required params (best-effort) – default to str
+                inferred_type = _infer_arg_type(param, m_cfg["class"])
+                parser.add_argument(opt, required=True, type=inferred_type)
                 _existing_opts.add(opt)
     for param, default in dataset_defaults.items():
         if param not in {"task", "dataset", "model", "epochs", "batch_size", "lr", "device", "num_workers", "dry_run"}:
@@ -338,6 +421,35 @@ def main(argv: list[str] | None = None):
 
     model = model_cls(**model_kwargs)
 
+    # ------------------- PRINT MODEL PARAMETER COUNT ----------------------
+    total_params = sum(p.numel() for p in model.parameters())
+    trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    print(f"Total model parameters:     {total_params:,}")
+    print(f"Trainable parameters:       {trainable_params:,}\n")
+    # ----------------------------------------------------------------------
+
+    # ------------------- PRINT TRAINING CONFIGURATION ----------------------
+    print("\n================ TFN TRAINING CONFIGURATION ================")
+    print(f"Model:        {args.model}")
+    print(f"Task:         {args.task}")
+    print(f"Dataset:      {args.dataset}")
+    print(f"Train size:   {len(train_ds)} samples")
+    print(f"Val size:     {len(val_ds)} samples")
+    print(f"Batch size:   {args.batch_size}")
+    print(f"Epochs:       {args.epochs}")
+    print(f"Learning rate:{args.lr}")
+    print(f"Device:       {args.device}")
+    # Print extra dataset info if available
+    for k in ["vocab_size", "num_classes", "output_dim", "num_tags", "num_features"]:
+        if k in model_kwargs:
+            print(f"{k.replace('_', ' ').capitalize()}: {model_kwargs[k]}")
+    # Print all model hyperparameters
+    print("Model hyperparameters:")
+    for k, v in model_kwargs.items():
+        print(f"  {k}: {v}")
+    print("===========================================================\n")
+    # ----------------------------------------------------------------------
+
     if args.dry_run:
         print("[DRY-RUN] Model & dataset instantiated successfully – exiting.")
         return
@@ -365,7 +477,7 @@ def main(argv: list[str] | None = None):
 
     torch.save(model.state_dict(), out_dir / "best_model.pt")
 
-    print(f"✔ Training complete. Final val loss = {metrics['final_val_loss']:.4f}")
+    print(f"✔ Training complete. Final val loss = {metrics['final_val_loss']:.4f} | Final val acc = {metrics['final_val_acc'] if metrics['final_val_acc'] is not None else 'NA':.4f}")
 
 
 if __name__ == "__main__":

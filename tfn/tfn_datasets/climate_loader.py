@@ -124,6 +124,32 @@ def load_electricity_transformer(
     )
 
 
+def load_electricity(
+    seq_len: int = 128,
+    val_split: int = 1000,
+    step: int = 1,
+    shuffle_train: bool = False,
+    shuffle_eval: bool = False,
+    **kwargs,
+):
+    """Alias for :func:`load_electricity_transformer` so that the unified
+    dataset registry can refer to a stable name (``climate_loader.load_electricity``)
+    regardless of internal naming. Accepts the same arguments and returns the
+    same `(train_ds, val_ds, num_features)` tuple.
+
+    Keeping a thin wrapper avoids breaking external imports while maintaining
+    a single implementation of the heavy-lifting logic.
+    """
+
+    return load_electricity_transformer(
+        seq_len=seq_len,
+        val_split=val_split,
+        step=step,
+        shuffle_train=shuffle_train,
+        shuffle_eval=shuffle_eval,
+    )
+
+
 def load_jena_climate(
     seq_len: int = 128,
     val_split: int = 1000,

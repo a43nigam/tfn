@@ -78,12 +78,46 @@ class LearnableKernels(nn.Module):
 class TrainableEvolution(nn.Module):
     """Trainable field evolution module."""
     
-    def __init__(self, embed_dim: int, evolution_type: str = "cnn", time_steps: int = 3):
+    def __init__(
+        self,
+        embed_dim: int,
+        evolution_type: str = "cnn",
+        time_steps: int = 3,
+        dropout: float = 0.0,
+    ):
+        """Create a trainable field evolution module.
+
+        Parameters
+        ----------
+        embed_dim : int
+            Embedding dimension of the field.
+        evolution_type : str, default "cnn"
+            Evolution operator to use ("cnn" or "pde").
+        time_steps : int, default 3
+            How many evolution sub-steps to perform.
+        dropout : float, default 0.0
+            Dropout probability *inside* the evolution operator. This allows
+            additional regularisation beyond the layer-level dropout and can
+            be tuned from the CLI via the existing ``--dropout`` flag.
+        """
         super().__init__()
         self.evolution_type = evolution_type
         self.time_steps = time_steps
         self.embed_dim = embed_dim
-        
+
+        # ---------------------------------------------------------------
+        # Robustness: argparse may pass *all* CLI values as strings when no
+        # explicit ``type=float`` is set. Convert here to guarantee `float`.
+        # ---------------------------------------------------------------
+        if isinstance(dropout, str):
+            try:
+                dropout = float(dropout)
+            except ValueError:
+                raise ValueError(f"dropout must be float-compatible, got {dropout!r}")
+
+        # Dedicated evolution dropout (Identity if p=0 to avoid overhead)
+        self.dropout = nn.Dropout(dropout) if dropout > 0 else nn.Identity()
+
         if evolution_type == "cnn":
             # Learnable CNN evolution
             self.conv_layers = nn.ModuleList([
@@ -93,7 +127,7 @@ class TrainableEvolution(nn.Module):
             # Initialize weights
             for conv in self.conv_layers:
                 nn.init.normal_(conv.weight, 0, 0.1)
-        
+
         elif evolution_type == "pde":
             # Learnable diffusion coefficient
             self.alpha = nn.Parameter(torch.tensor(0.1))
@@ -117,6 +151,8 @@ class TrainableEvolution(nn.Module):
             evolved = conv(evolved)
             evolved = evolved.transpose(1, 2)
             evolved = F.relu(evolved)
+            # ------------------ internal dropout ------------------
+            evolved = self.dropout(evolved)
         return evolved
     
     def _pde_evolution(self, field: torch.Tensor, grid_points: torch.Tensor) -> torch.Tensor:
@@ -182,7 +218,14 @@ class TrainableTFNLayer(nn.Module):
         
         # Learnable components
         self.kernels = LearnableKernels(embed_dim, kernel_type)
-        self.evolution = TrainableEvolution(embed_dim, evolution_type, time_steps)
+        # Pass the same dropout value to the evolution module so that users can
+        # control *all* regularisation from a single CLI flag.
+        self.evolution = TrainableEvolution(
+            embed_dim,
+            evolution_type,
+            time_steps,
+            dropout=dropout,
+        )
         self.pos_embeddings = PositionEmbeddings(embed_dim, max_seq_len)
         
         # Standard transformer components
@@ -193,8 +236,14 @@ class TrainableTFNLayer(nn.Module):
         # Learnable grid (optional)
         self.learnable_grid = nn.Parameter(torch.linspace(0, 1, grid_size))
     
-    def forward(self, embeddings: torch.Tensor, positions: torch.Tensor,
-                use_learnable_grid: bool = False) -> torch.Tensor:
+    def forward(
+        self,
+        embeddings: torch.Tensor,
+        positions: torch.Tensor,
+        use_learnable_grid: bool = False,
+        *,
+        add_pos_emb: bool = True,
+    ) -> torch.Tensor:
         """
         Forward pass of trainable TFN layer.
         
@@ -202,16 +251,24 @@ class TrainableTFNLayer(nn.Module):
             embeddings: [B, N, D] token embeddings
             positions: [B, N, P] token positions (P=1 for 1D)
             use_learnable_grid: Whether to use learnable grid points
+            add_pos_emb: If *True*, the layer will add its own learnable
+                positional embeddings. Set to *False* if the caller has
+                already combined positional information with the token
+                embeddings (to avoid double-counting).
         
         Returns:
             updated_embeddings: [B, N, D] updated embeddings with residual connection
         """
         B, N, D = embeddings.shape
         P = positions.shape[-1]
-        
-        # Add position embeddings
-        pos_emb = self.pos_embeddings(positions)
-        x = embeddings + pos_emb
+
+        # Optionally incorporate positional information ---------------------
+        if add_pos_emb:
+            pos_emb = self.pos_embeddings(positions)
+            x = embeddings + pos_emb
+        else:
+            # Caller has already added positional information
+            x = embeddings
         
         # Create grid points
         if use_learnable_grid:
