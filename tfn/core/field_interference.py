@@ -132,9 +132,8 @@ class TokenFieldInterference(nn.Module):
         field_pairs = fields_expanded * fields_transposed  # [B, N, N, H, D//H]
         
         # Apply field coupler to pairs
-        # [B, N, N, H, D//H] × [H, H] -> [B, N, N, H, H]
-        # Fix einsum equation to avoid duplicate output indices
-        coupled_pairs = torch.einsum('bnmhd,hf->bnmhf', field_pairs, self.field_coupler)
+        # Correct einsum: mix heads, preserve shape [B, N, N, H, D//H]
+        coupled_pairs = torch.einsum('bnmhd,hk->bnmkd', field_pairs, self.field_coupler)
         
         # Compute interference: 2Re(F_i*F_j)
         # Sum over the coupling dimension and take real part
@@ -162,8 +161,8 @@ class TokenFieldInterference(nn.Module):
         field_pairs = fields_expanded * fields_transposed  # [B, N, N, H, D//H]
         
         # Apply field coupler to pairs
-        # Fix einsum equation to avoid duplicate output indices
-        coupled_pairs = torch.einsum('bnmhd,hf->bnmhf', field_pairs, self.field_coupler)
+        # Correct einsum: mix heads, preserve shape [B, N, N, H, D//H]
+        coupled_pairs = torch.einsum('bnmhd,hk->bnmkd', field_pairs, self.field_coupler)
         
         # Compute destructive interference: -2Re(F_i*F_j)
         interference = -2 * torch.real(coupled_pairs.sum(dim=-1, keepdim=True))  # [B, N, N, H, 1]
@@ -189,8 +188,8 @@ class TokenFieldInterference(nn.Module):
         field_pairs = fields_expanded * fields_transposed  # [B, N, N, H, D//H]
         
         # Apply field coupler to pairs
-        # Fix einsum equation to avoid duplicate output indices
-        coupled_pairs = torch.einsum('bnmhd,hf->bnmhf', field_pairs, self.field_coupler)
+        # Correct einsum: mix heads, preserve shape [B, N, N, H, D//H]
+        coupled_pairs = torch.einsum('bnmhd,hk->bnmkd', field_pairs, self.field_coupler)
         
         # Compute phase interference: Re(F_i*F_j)
         interference = torch.real(coupled_pairs.sum(dim=-1, keepdim=True))  # [B, N, N, H, 1]
