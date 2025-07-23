@@ -17,7 +17,7 @@ import torch
 import pytest
 
 from tfn.core.field_interference import TokenFieldInterference
-from tfn.core.dynamic_propagation import DynamicFieldPropagator
+from tfn.core.field_evolution import DynamicFieldPropagator
 
 
 @pytest.mark.parametrize("batch, tokens, embed_dim", [(1, 4, 8), (2, 6, 16)])

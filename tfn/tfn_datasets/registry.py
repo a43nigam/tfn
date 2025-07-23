@@ -17,12 +17,13 @@ from . import (
     pg19_loader,
     arxiv_loader,
     climate_loader,
-    physics_loader,
+    synthetic_pde_generator,
     ner_loader,
     dataset_loaders,
     vision_loader,
 )
 from tfn.utils.synthetic_sequence_tasks import get_synthetic_sequence_dataloaders
+import torch
 
 __all__ = [
     "get_dataset",
@@ -54,12 +55,13 @@ _DATASET_REGISTRY: Dict[str, Callable[..., Any]] = {
     "long_text_synth": long_text_loader.create_long_text_dataloader,
     # ----------------------- time-series ----------------------------------------
     "electricity": climate_loader.load_electricity if hasattr(climate_loader, "load_electricity") else None,
-    "jena": climate_loader.load_jena_single if hasattr(climate_loader, "load_jena_single") else None,
+    "jena": climate_loader.load_jena_climate if hasattr(climate_loader, "load_jena_climate") else None,
     "jena_multi": climate_loader.load_jena_multi if hasattr(climate_loader, "load_jena_multi") else None,
     # ----------------------- physics / PDE --------------------------------------
-    "burgers": lambda **kw: physics_loader.load_physics_dataset(dataset_type="burgers", **kw),
-    "wave": lambda **kw: physics_loader.load_physics_dataset(dataset_type="wave", **kw),
-    "heat": lambda **kw: physics_loader.load_physics_dataset(dataset_type="heat", **kw),
+    # physics / PDE (synthetic generators)
+    "pde_burgers_synthetic": lambda **kw: synthetic_pde_generator.load_physics_dataset(dataset_type="burgers", **kw),
+    "pde_wave_synthetic": lambda **kw: synthetic_pde_generator.load_physics_dataset(dataset_type="wave", **kw),
+    "pde_heat_synthetic": lambda **kw: synthetic_pde_generator.load_physics_dataset(dataset_type="heat", **kw),
     # ----------------------- NER -------------------------------------------------
     "conll2003": ner_loader.load_conll if hasattr(ner_loader, "load_conll") else None,
     # ----------------------- synthetic seq tasks --------------------------------
@@ -92,7 +94,50 @@ def get_dataset(name: str, **kwargs: Any):
     if name not in _DATASET_REGISTRY or _DATASET_REGISTRY[name] is None:
         raise ValueError(f"Dataset '{name}' not available. Known: {list(_DATASET_REGISTRY.keys())}")
     loader = _DATASET_REGISTRY[name]
-    return loader(**kwargs)
+    result = loader(**kwargs)
+
+    # ------------------------------------------------------------------
+    # Normalise return signature → (train_ds, val_ds, meta_dict)
+    # Legacy loaders may return an int (e.g. vocab_size). We convert this
+    # into a dictionary so downstream code can rely on a uniform contract.
+    # ------------------------------------------------------------------
+
+    if not (isinstance(result, tuple) and len(result) == 3):
+        raise ValueError(
+            "Dataset loader must return (train_ds, val_ds, meta). "
+            f"Got type {type(result)} from '{name}'."
+        )
+
+    train_ds, val_ds, meta = result
+
+    # Meta is already a dict → nothing to do
+    if isinstance(meta, dict):
+        return train_ds, val_ds, meta
+
+    # Meta is an int → assume it encodes the vocabulary size (text datasets)
+    if isinstance(meta, int):
+        vocab_size = int(meta)
+
+        # Attempt to infer number of classes from label tensor if available
+        num_classes = None
+        try:
+            if hasattr(train_ds, "tensors"):
+                labels = train_ds.tensors[1]
+                if labels.dtype.is_floating_point:
+                    num_classes = None  # regression
+                else:
+                    num_classes = int(torch.max(labels).item()) + 1  # type: ignore
+        except Exception:  # pragma: no cover – best-effort inference
+            num_classes = None
+
+        meta_dict: Dict[str, Any] = {"vocab_size": vocab_size}
+        if num_classes is not None:
+            meta_dict["num_classes"] = num_classes
+
+        return train_ds, val_ds, meta_dict
+
+    # Fallback – wrap anything else inside a dict under 'info'
+    return train_ds, val_ds, {"info": meta}
 
 
 def list_datasets() -> Dict[str, Callable[..., Any]]:

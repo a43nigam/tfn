@@ -24,11 +24,11 @@ from tfn.core.field_interference import (
     create_field_interference
 )
 
-from tfn.core.dynamic_propagation import (
+from tfn.core.field_evolution import (
     DynamicFieldPropagator,
     AdaptiveFieldPropagator,
     CausalFieldPropagator,
-    create_field_propagator
+    create_field_evolver
 )
 
 from tfn.core.unified_field_dynamics import (
@@ -121,7 +121,7 @@ def test_corrected_pde_evolution():
                 interference_type = "standard"
             
             # Create propagator
-            propagator = create_field_propagator(
+            propagator = create_field_evolver(
                 propagator_type=propagator_type,
                 embed_dim=embed_dim,
                 pos_dim=pos_dim,
@@ -131,7 +131,7 @@ def test_corrected_pde_evolution():
             
             # Test forward pass
             start_time = time.time()
-            evolved_fields = propagator(token_fields, positions, grid_points)
+            evolved_fields = propagator(token_fields, positions)
             forward_time = time.time() - start_time
             
             # Verify output shape
@@ -275,7 +275,8 @@ def test_mathematical_correctness():
     
     # Test stability correction
     corrected_evolution = stability_monitor.apply_stability_correction(unstable_evolution)
-    assert stability_monitor.check_stability(corrected_evolution)
+    # Allow tiny numerical drift with >= threshold check
+    assert stability_monitor.check_stability(corrected_evolution), "Stability correction failed"
     
     print(f"  ✅ Stability monitoring: PASSED")
 

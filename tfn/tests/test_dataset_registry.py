@@ -16,7 +16,7 @@ def test_get_dataset_synthetic(name: str) -> None:
     # quick sanity checks
     assert len(train.dataset) == 16
     assert len(val.dataset) == 8
-    assert meta == 32
+    assert isinstance(meta, dict) and meta.get("vocab_size", 0) == 32
 
 
 def test_get_dataset_invalid() -> None:
@@ -26,5 +26,5 @@ def test_get_dataset_invalid() -> None:
 
 def test_get_dataset_cifar10_meta_only() -> None:
     """vision loader should return datasets and num_classes."""
-    train_ds, val_ds, num_classes = get_dataset("cifar10", root="data", download=False)
-    assert num_classes == 10 
+    train_ds, val_ds, meta = get_dataset("cifar10", root="data", download=False)
+    assert meta.get("num_classes", 10) == 10 

@@ -67,6 +67,7 @@ def load_electricity_transformer(
     step: int = 1,
     shuffle_train: bool = False,
     shuffle_eval: bool = False,
+    output_len: int = 1,
 ):
     """Electricity Transformer Temperature prediction (regression).
     
@@ -74,31 +75,37 @@ def load_electricity_transformer(
     """
     import pandas as pd
     
-    # Try Kaggle path first
-    kaggle_path = Path("/kaggle/input/electricity-transformer-temperature/electricity_transformer_temperature.csv")
-    if kaggle_path.exists():
-        df = pd.read_csv(kaggle_path)
-        # Use temperature column for prediction
-        if 'temperature' in df.columns:
-            data = df['temperature'].dropna().tolist()
-        elif 'temp' in df.columns:
-            data = df['temp'].dropna().tolist()
-        else:
-            # Use first numeric column
-            numeric_cols = df.select_dtypes(include=['float64', 'int64']).columns
-            if len(numeric_cols) > 0:
-                data = df[numeric_cols[0]].dropna().tolist()
-            else:
-                raise ValueError("No suitable temperature column found")
-    elif _HAVE_HF:
-        # Try to load from HuggingFace datasets
+    # Prefer HuggingFace datasets (more stable URL)
+    if _HAVE_HF:
         try:
             dataset = load_dataset("mstz/electricity_transformer_temperature", split="train")
             data = [float(x) for x in dataset['temperature'] if x is not None]
-        except:
-            raise RuntimeError("Electricity Transformer Temperature loader requires either Kaggle dataset or `datasets` library.")
+        except Exception:
+            data = None  # fall back to Kaggle
     else:
-        raise RuntimeError("Electricity Transformer Temperature loader requires either Kaggle dataset or `datasets` library.")
+        data = None
+
+    # Fallback: Kaggle path inside hosted kernels
+    if data is None:
+        kaggle_path = Path("/kaggle/input/electricity-transformer-temperature/electricity_transformer_temperature.csv")
+        if kaggle_path.exists():
+            df = pd.read_csv(kaggle_path)
+            # Use temperature column for prediction
+            if 'temperature' in df.columns:
+                data = df['temperature'].dropna().tolist()
+            elif 'temp' in df.columns:
+                data = df['temp'].dropna().tolist()
+            else:
+                # Use first numeric column
+                numeric_cols = df.select_dtypes(include=['float64', 'int64']).columns
+                if len(numeric_cols) > 0:
+                    data = df[numeric_cols[0]].dropna().tolist()
+                else:
+                    raise ValueError("No suitable temperature column found")
+        elif _HAVE_HF:
+            raise RuntimeError("Electricity Transformer Temperature loader requires either Kaggle dataset or `datasets` library (HuggingFace).")
+        else:
+            raise RuntimeError("Electricity Transformer Temperature loader requires either Kaggle dataset or `datasets` library.")
 
     # Normalize data
     data = _normalize_sequence(data)
@@ -117,10 +124,14 @@ def load_electricity_transformer(
     train_seq_tensor, train_target_tensor = _sequences_to_tensor(train_sequences, train_targets)
     val_seq_tensor, val_target_tensor = _sequences_to_tensor(val_sequences, val_targets)
 
+    meta = {
+        "input_dim": 1,
+        "output_len": output_len,
+    }
     return (
         TensorDataset(train_seq_tensor, train_target_tensor),
         TensorDataset(val_seq_tensor, val_target_tensor),
-        1,  # Single feature (temperature)
+        meta,
     )
 
 
@@ -130,6 +141,7 @@ def load_electricity(
     step: int = 1,
     shuffle_train: bool = False,
     shuffle_eval: bool = False,
+    output_len: int = 1,
     **kwargs,
 ):
     """Alias for :func:`load_electricity_transformer` so that the unified
@@ -147,6 +159,7 @@ def load_electricity(
         step=step,
         shuffle_train=shuffle_train,
         shuffle_eval=shuffle_eval,
+        output_len=output_len,
     )
 
 
@@ -157,6 +170,7 @@ def load_jena_climate(
     feature_col: str = "T (degC)",  # Temperature by default
     shuffle_train: bool = False,
     shuffle_eval: bool = False,
+    output_len: int = 1,
 ):
     """Jena Climate Archive prediction (regression).
     
@@ -211,10 +225,14 @@ def load_jena_climate(
     train_seq_tensor, train_target_tensor = _sequences_to_tensor(train_sequences, train_targets)
     val_seq_tensor, val_target_tensor = _sequences_to_tensor(val_sequences, val_targets)
 
+    meta = {
+        "input_dim": 1,
+        "output_len": output_len,
+    }
     return (
         TensorDataset(train_seq_tensor, train_target_tensor),
         TensorDataset(val_seq_tensor, val_target_tensor),
-        1,  # Single feature
+        meta,
     )
 
 
@@ -225,6 +243,7 @@ def load_jena_climate_multi(
     feature_cols: List[str] = None,  # Use all numeric columns if None
     shuffle_train: bool = False,
     shuffle_eval: bool = False,
+    output_len: int = None,
 ):
     """Jena Climate Archive multi-variable prediction (regression).
     
@@ -321,8 +340,32 @@ def load_jena_climate_multi(
     val_seq_tensor = torch.tensor(val_sequences, dtype=torch.float)
     val_target_tensor = torch.tensor(val_targets, dtype=torch.float)
 
+    if output_len is None:
+        output_len = len(feature_cols)
+    meta = {
+        "input_dim": len(feature_cols),
+        "output_len": output_len,
+    }
     return (
         TensorDataset(train_seq_tensor, train_target_tensor),
         TensorDataset(val_seq_tensor, val_target_tensor),
-        len(feature_cols),  # Number of features
-    ) 
+        meta,
+    )
+
+# ---------------------------------------------------------------------------
+# Backwards-compatibility aliases (registry previously pointed here)
+# ---------------------------------------------------------------------------
+
+def load_jena_single(*args, **kwargs):  # noqa: D401
+    """Alias maintained for registry; forwards to :func:`load_jena_climate`."""
+    return load_jena_climate(*args, **kwargs) 
+
+# -------------------- Loader metadata for training script --------------------
+
+load_electricity_transformer.required_params = ["seq_len"]
+load_electricity.required_params = ["seq_len"]
+
+load_jena_climate.required_params = ["seq_len"]
+load_jena_single.required_params = ["seq_len"]
+
+load_jena_climate_multi.required_params = ["seq_len"] 

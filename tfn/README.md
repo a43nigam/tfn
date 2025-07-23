@@ -18,7 +18,7 @@ tfn/
 └── utils/             # metrics, plotting, synthetic generators
 ```
 
-Every directory is **unit-testable in isolation**; run `python -m tfn.run_comprehensive_tests` for full coverage.
+Every directory is **unit-testable in isolation**; run `pytest -q` for full coverage.
 
 ---
 
@@ -33,7 +33,7 @@ python -m tfn.scripts.train \
     --task classification \
     --dataset agnews \
     --model tfn_classifier \
-    --embed_dim 128 \
+    --model_kwargs '{"embed_dim": 128}' \
     --epochs 10
 ```
 
@@ -50,11 +50,11 @@ TIP : add `--device cuda` for GPU, or omit to let TFN auto-detect.
 | **Time-series**        | `electricity`, `jena`, `jena_multi`                        |
 | **Language modelling** | `pg19`, `long_text_synth`                                  |
 | **Vision** (β)         | `cifar10`, `cifar100`, `imagenet32`                        |
-| **Physics / PDE**      | `burgers`, `wave`, `heat`                                  |
+| **Physics / PDE**      | `pde_burgers_synthetic`, `pde_wave_synthetic`, `pde_heat_synthetic` *(synthetic generators)* |
 | **NER** (β)            | `conll2003`                                               |
 | **Synthetic**          | `synthetic_copy`, `synthetic_reverse`                      |
 
-> All loaders live in `tfn/tfn_datasets/registry.py` – pass additional kwargs directly via CLI, e.g. `--seq_len 256`.
+> All loaders live in `tfn/tfn_datasets/registry.py` – pass dataset-specific args via JSON, e.g. `--dataset_kwargs '{"seq_len": 256}'`.
 
 ---
 
@@ -96,21 +96,24 @@ python -m tfn.scripts.train \
 ```bash
 python -m tfn.scripts.train \
   --task classification --dataset sst2 --model tfn_classifier \
-  --embed_dim 256 --num_layers 3 --epochs 10
+  --model_kwargs '{"embed_dim": 256, "num_layers": 3}' \
+  --epochs 10
 ```
 
 2. **Time-series forecasting (Electricity)**
 ```bash
 python -m tfn.scripts.train \
   --task time_series --dataset electricity --model tfn_timeseries_regressor \
-  --seq_len 168 --step 1 --epochs 5
+  --dataset_kwargs '{"seq_len": 168, "step": 1}' \
+  --epochs 5
 ```
 
 3. **Language modelling (PG-19) with Enhanced TFN**
 ```bash
 python -m tfn.scripts.train \
   --task language_modeling --dataset pg19 --model enhanced_tfn_language_model \
-  --interference_type standard --propagator_type wave --epochs 3
+  --model_kwargs '{"interference_type": "standard", "propagator_type": "wave"}' \
+  --epochs 3
 ```
 
 4. **Baseline Transformer on IMDB**
@@ -119,7 +122,7 @@ python -m tfn.scripts.train \
   --task classification --dataset imdb --model transformer_classifier --epochs 5
 ```
 
-> Check the registry or run with `--dry_run` to print all required/optional parameters before training.
+> Check the registry or run with `--dry_run` to print all required/optional parameters before training.contin
 
 ---
 
@@ -141,11 +144,9 @@ Presets live inside `scripts/benchmark.py` (`quick`, `nlp_small`, `nlp_full`, `t
 * **Physics Constraints** – optional loss enforcing e.g. Burgers/Heat/Wave equations.
 * **2-D ImageTFN** – extend fields over (H × W) grid; see `tests/test_tfn_pytorch.py` for usage.
 
-Enable via the Enhanced model registry keys and pass:
+Enable via the Enhanced model registry keys and pass JSON kwargs:
 ```bash
---interference_type standard  # or 'multihead', 'gated', …
---propagator_type diffusion   # or 'wave', 'schrodinger'
---use_physics_constraints     # flag, adds auxiliary PDE loss
+--model_kwargs '{"interference_type": "standard", "propagator_type": "diffusion", "use_physics_constraints": true}'
 ```
 
 ---
@@ -167,7 +168,7 @@ outputs/
 
 1. **Numerical stability** – all evolvers support FP32/AMP; kernels normalised to avoid blow-up.
 2. **Modularity** – every component has a public `forward` with clear typing + docstring.
-3. **Testing** – run `pytest -q` or `python -m tfn.run_comprehensive_tests` (takes ~3 min CPU).
+3. **Testing** – run `pytest -q` for the full suite.
 4. **Extending TFN** – add a new kernel/evolution in `core/`, register it, add a unit-test, and update this README.
 
 ---

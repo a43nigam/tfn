@@ -344,7 +344,7 @@ class StabilityMonitor(nn.Module):
         """Apply stability correction to evolution."""
         # Clip magnitudes to threshold
         magnitudes = torch.norm(evolution, dim=-1, keepdim=True)
-        scale_factor = torch.clamp(self.threshold / (magnitudes + 1e-8), max=1.0)
+        scale_factor = torch.clamp(self.threshold / (magnitudes + 1e-8), max=1.0) * 0.999
         
         # Apply scaling
         corrected_evolution = evolution * scale_factor

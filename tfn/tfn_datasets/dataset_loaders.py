@@ -84,10 +84,11 @@ def load_yelp_full(
     train_ids = texts_to_tensor(train_texts, word2idx, seq_len, shuffle_train)
     val_ids = texts_to_tensor(val_texts, word2idx, seq_len, shuffle_eval)
 
+    meta = {"vocab_size": len(word2idx), "num_classes": 5}
     return (
         TensorDataset(train_ids, torch.tensor(train_labels)),
         TensorDataset(val_ids, torch.tensor(val_labels)),
-        len(word2idx),
+        meta,
     )
 
 
@@ -133,8 +134,9 @@ def load_imdb(
     train_ids = texts_to_tensor(train_texts, word2idx, seq_len, shuffle_train)
     val_ids = texts_to_tensor(val_texts, word2idx, seq_len, shuffle_eval)
 
+    meta = {"vocab_size": len(word2idx), "num_classes": 2}
     return (
         TensorDataset(train_ids, torch.tensor(train_labels)),
         TensorDataset(val_ids, torch.tensor(val_labels)),
-        len(word2idx),
+        meta,
     ) 
