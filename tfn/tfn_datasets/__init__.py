@@ -40,10 +40,13 @@ __all__ = [
 
 # Use relative import instead of absolute
 try:
-    _text_mod = _imp(".text_classification", package="tfn_datasets")
-    _glue_mod = _imp(".glue_loader", package="tfn_datasets")
-    _arxiv_mod = _imp(".arxiv_loader", package="tfn_datasets")
-    _climate_mod = _imp(".climate_loader", package="tfn_datasets")
+    # Use current package path (handles both "tfn.tfn_datasets" and standalone "tfn_datasets")
+    _PKG = __package__ or "tfn.tfn_datasets"
+
+    _text_mod = _imp(".text_classification", package=_PKG)
+    _glue_mod = _imp(".glue_loader", package=_PKG)
+    _arxiv_mod = _imp(".arxiv_loader", package=_PKG)
+    _climate_mod = _imp(".climate_loader", package=_PKG)
     
     # Text classification loaders
     for name in ["load_agnews", "load_yelp_full", "load_imdb"]:

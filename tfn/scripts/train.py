@@ -18,6 +18,7 @@ import argparse
 from types import SimpleNamespace
 from pathlib import Path
 from typing import Dict, Any
+import math
 
 import torch
 import inspect
@@ -36,8 +37,9 @@ from tfn.datasets.registry import (
 )
 
 # -----------------------------------------------------------------------------
-# Helper: generic training loop ------------------------------------------------
+# Enhanced training util -------------------------------------------------------
 # -----------------------------------------------------------------------------
+
 
 def train_and_evaluate(
     model: torch.nn.Module,
@@ -48,11 +50,41 @@ def train_and_evaluate(
     epochs: int = 5,
     device: str | torch.device = "cpu",
     lr: float = 1e-3,
+    weight_decay: float = 0.01,
+    warmup_ratio: float = 0.1,
+    grad_clip: float = 1.0,
 ) -> Dict[str, Any]:
-    """Train *model* and return a metrics dictionary."""
+    """Train *model* and return a metrics dictionary.
+
+    Key improvements over the earlier simplistic loop:
+
+    1. **AdamW** optimiser for proper decoupled weight-decay.
+    2. **Warm-up + Cosine decay** learning-rate schedule (`WarmCosineScheduler`).
+    3. **Gradient clipping** to avoid exploding gradients.
+
+    All hyper-parameters retain sensible defaults so existing code paths/CLI
+    invocations will continue to work unchanged.
+    """
 
     model.to(device)
-    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+
+    # AdamW optimiser ---------------------------------------------------------
+    optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
+
+    # ---------------------------------------------------------------------
+    # Warm Cosine LR Scheduler (linear warm-up → cosine decay)
+    # ---------------------------------------------------------------------
+
+    total_steps = epochs * max(1, len(train_loader))
+    warmup_steps = int(warmup_ratio * total_steps)
+
+    def _lr_lambda(current_step: int):
+        if current_step < warmup_steps:
+            return float(current_step) / float(max(1, warmup_steps))
+        progress = float(current_step - warmup_steps) / float(max(1, total_steps - warmup_steps))
+        return 0.5 * (1.0 + math.cos(math.pi * progress))  # cosine decay  → 0
+
+    scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, _lr_lambda)
 
     if task in {"classification", "ner"}:
         criterion = torch.nn.CrossEntropyLoss()
@@ -88,7 +120,12 @@ def train_and_evaluate(
                 raise ValueError(f"Unsupported task: {task}")
 
             loss.backward()
+            # Gradient clipping for stability
+            if grad_clip is not None and grad_clip > 0:
+                torch.nn.utils.clip_grad_norm_(model.parameters(), grad_clip)
+
             optimizer.step()
+            scheduler.step()
             total += loss.item()
         train_loss = total / max(1, len(train_loader))
         history["train_loss"].append(train_loss)
@@ -145,6 +182,9 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument("--epochs", type=int, default=10)
     p.add_argument("--batch_size", type=int, default=32)
     p.add_argument("--lr", type=float, default=1e-3)
+    p.add_argument("--weight_decay", type=float, default=0.01)
+    p.add_argument("--warmup_ratio", type=float, default=0.1)
+    p.add_argument("--grad_clip", type=float, default=1.0)
     p.add_argument("--device", type=str, default="cuda" if torch.cuda.is_available() else "cpu")
     p.add_argument("--num_workers", type=int, default=2)
     p.add_argument("--dry_run", action="store_true")
@@ -193,18 +233,49 @@ def main(argv: list[str] | None = None):
 
     # Build a new parser with all dynamic args
     parser = _build_parser()
+    # Track already-registered option strings to avoid argparse conflicts
+    _existing_opts = set(parser._option_string_actions)
     for param in model_required:
-        if param not in {"task", "dataset", "model", "epochs", "batch_size", "lr", "device", "num_workers", "dry_run"}:
-            parser.add_argument(f"--{param}", required=True)
+        if param in {"task", "dataset", "model", "epochs", "batch_size", "lr", "device", "num_workers", "dry_run"}:
+            continue
+
+        opt = f"--{param}"
+        if opt in _existing_opts:
+            continue
+
+        # Determine if we can supply a default automatically (from model defaults or dataset meta)
+        default_val = None
+        if param in m_cfg.get("defaults", {}):
+            default_val = m_cfg["defaults"][param]
+        elif param in d_cfg:
+            default_val = d_cfg[param]
+        elif param in d_cfg.get("default_params", {}):
+            default_val = d_cfg["default_params"][param]
+
+        if default_val is not None:
+            parser.add_argument(opt, default=default_val, type=type(default_val))
+        else:
+            parser.add_argument(opt, required=True)
+
+        _existing_opts.add(opt)
     for param in model_optional:
         if param not in {"task", "dataset", "model", "epochs", "batch_size", "lr", "device", "num_workers", "dry_run"}:
-            parser.add_argument(f"--{param}", default=m_cfg.get("defaults", {}).get(param))
+            opt = f"--{param}"
+            if opt not in _existing_opts:
+                parser.add_argument(opt, default=m_cfg.get("defaults", {}).get(param))
+                _existing_opts.add(opt)
     for param in dataset_params:
         if param not in {"task", "dataset", "model", "epochs", "batch_size", "lr", "device", "num_workers", "dry_run"}:
-            parser.add_argument(f"--{param}", required=True)
+            opt = f"--{param}"
+            if opt not in _existing_opts:
+                parser.add_argument(opt, required=True)
+                _existing_opts.add(opt)
     for param, default in dataset_defaults.items():
         if param not in {"task", "dataset", "model", "epochs", "batch_size", "lr", "device", "num_workers", "dry_run"}:
-            parser.add_argument(f"--{param}", type=type(default), default=default)
+            opt = f"--{param}"
+            if opt not in _existing_opts:
+                parser.add_argument(opt, type=type(default), default=default)
+                _existing_opts.add(opt)
 
     args = parser.parse_args(argv)
 
@@ -239,7 +310,32 @@ def main(argv: list[str] | None = None):
         if k not in model_kwargs and v is not None:
             model_kwargs[k] = v
 
+    # Fallback: use static dataset registry values if still missing
+    for k in ["vocab_size", "num_classes", "output_dim", "num_tags", "num_features"]:
+        if k not in model_kwargs and d_cfg.get(k) is not None:
+            model_kwargs[k] = d_cfg[k]
+
+    # Map generic dataset fields to model-required names
+    if "input_dim" in model_required and "input_dim" not in model_kwargs:
+        if "num_features" in model_kwargs:
+            model_kwargs["input_dim"] = model_kwargs["num_features"]
+        elif "output_dim" in model_kwargs:  # fallback single feature
+            model_kwargs["input_dim"] = model_kwargs["output_dim"]
+        else:
+            model_kwargs["input_dim"] = 1
+
+    if "output_len" in model_required and "output_len" not in model_kwargs:
+        if "output_dim" in model_kwargs:
+            model_kwargs["output_len"] = model_kwargs["output_dim"]
+        else:
+            model_kwargs["output_len"] = 1
+
     model_cls = m_cfg["class"]
+
+    # Ensure 'task' argument is passed if model expects it (Unified TFN)
+    if "task" in model_cls.__init__.__code__.co_varnames and "task" not in model_kwargs:
+        model_kwargs["task"] = args.task
+
     model = model_cls(**model_kwargs)
 
     if args.dry_run:
@@ -254,6 +350,9 @@ def main(argv: list[str] | None = None):
         epochs=args.epochs,
         device=args.device,
         lr=args.lr,
+        weight_decay=args.weight_decay,
+        warmup_ratio=args.warmup_ratio,
+        grad_clip=args.grad_clip,
     )
 
     # Save metrics to outputs/ directory -----------------------------------

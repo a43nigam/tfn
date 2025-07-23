@@ -101,8 +101,12 @@ class TokenFieldInterference(nn.Module):
             interference_terms.append(phase)
         
         # Weighted combination of interference terms
-        interference_weights = F.softmax(self.interference_weights, dim=0)
-        combined_interference = sum(w * term for w, term in zip(interference_weights, interference_terms))
+        if len(interference_terms) == 0:
+            # No valid interference type, return zeros of correct shape
+            combined_interference = torch.zeros_like(fields_reshaped)
+        else:
+            interference_weights = F.softmax(self.interference_weights, dim=0)
+            combined_interference = sum(w * term for w, term in zip(interference_weights, interference_terms))
         
         # Apply interference to original fields
         enhanced_fields = fields_reshaped + self.dropout(combined_interference)

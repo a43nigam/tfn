@@ -1,414 +1,180 @@
-# Token Field Network (TFN) Training Guide
+# Token Field Network (TFN)
 
-This repository contains a **streamlined** implementation of Token Field Networks (TFN).
+A novel architecture that replaces attention with continuous field **projection → evolution → sampling**. TFN scales linearly, preserves spatial inductive bias, and is differentiable end-to-end.
 
-• **UnifiedTFN** – a single, fully-parameterised PyTorch module that covers *all* 1-D sequence use-cases (classification, regression, time-series) via a simple `task` flag.
-• **ImageTFN** – the dedicated 2-D / image variant.
-• **EnhancedTFN** – an optional research variant that augments UnifiedTFN with *field interference*, *dynamic propagation*, and *physics-inspired* constraints. Enable via `--model enhanced_tfn_classifier` (classification) or by passing `use_enhanced=True` to `UnifiedTFN`.
+> **Key idea** – every token emits a learnable Gaussian/RBF field on a 1-D (or 2-D) grid. Fields evolve via CNN/PDE operators, optionally interact (interference), and are re-sampled back into token embeddings.
 
-Legacy wrappers such as `TFNClassifier`, `TFNRegressor`, and `tfn.model.tfn_2d.*` remain as *thin aliases* for backward compatibility but will be removed in a future release.
+---
 
-TFN replaces attention with continuous field projection, evolution, and sampling; the new unified design eliminates code duplication while preserving full CLI configurability.
+## 📦 Repository Layout
+
+```
+tfn/
+├── core/              # kernels, projection, evolution, sampling, interference
+├── model/             # high-level PyTorch modules + baselines
+├── tfn_datasets/      # lightweight dataset loaders (text, time-series, vision, physics, …)
+├── scripts/           # unified training + benchmark CLIs
+├── tests/             # >200 unit tests covering maths + numerics
+└── utils/             # metrics, plotting, synthetic generators
+```
+
+Every directory is **unit-testable in isolation**; run `python -m tfn.run_comprehensive_tests` for full coverage.
+
+---
 
 ## 🚀 Quick Start
 
-### Install Dependencies
 ```bash
-pip install torch datasets pandas numpy
+# 1. Install (CPU)
+pip install torch pandas numpy datasets
+
+# 2. Train on AG News (text classification)
+python -m tfn.scripts.train \
+    --task classification \
+    --dataset agnews \
+    --model tfn_classifier \
+    --embed_dim 128 \
+    --epochs 10
 ```
 
-### Basic Training Examples
-```bash
-# Train TFN on AG News (text classification)
-python -m tfn.scripts.train --task classification --dataset agnews --model tfn --epochs 10
+TIP : add `--device cuda` for GPU, or omit to let TFN auto-detect.
 
-# Train TFN on SST-2 (GLUE)
-python -m tfn.scripts.train --task classification --dataset sst2 --model tfn --epochs 10
+---
 
-# Train TFN on Electricity Transformer Temperature (time-series)
-python -m tfn.scripts.train --task time_series --dataset electricity --model tfn --epochs 10
-```
+## 🏗 Supported Tasks & Datasets
 
-## 📊 Available Datasets
+| Task                   | Dataset keys (📥 `--dataset`)                              |
+|------------------------|------------------------------------------------------------|
+| Text **classification**| `agnews`, `imdb`, `yelp_full`, plus all GLUE: `sst2`, `mrpc`, `qqp`, `qnli`, `rte`, `cola`, `wnli` |
+| Text **regression**    | `stsb`                                                     |
+| **Time-series**        | `electricity`, `jena`, `jena_multi`                        |
+| **Language modelling** | `pg19`, `long_text_synth`                                  |
+| **Vision** (β)         | `cifar10`, `cifar100`, `imagenet32`                        |
+| **Physics / PDE**      | `burgers`, `wave`, `heat`                                  |
+| **NER** (β)            | `conll2003`                                               |
+| **Synthetic**          | `synthetic_copy`, `synthetic_reverse`                      |
 
-### Text Classification Datasets
-- **AG News**: 4-class news classification
-- **IMDB**: Binary sentiment analysis
-- **Yelp Full**: 5-class review classification
+> All loaders live in `tfn/tfn_datasets/registry.py` – pass additional kwargs directly via CLI, e.g. `--seq_len 256`.
 
-### GLUE Benchmark Tasks
-- **SST-2**: Sentiment analysis (binary)
-- **MRPC**: Paraphrase detection (binary)
-- **QQP**: Question similarity (binary)
-- **QNLI**: Question-answer entailment (binary)
-- **RTE**: Textual entailment (binary)
-- **CoLA**: Linguistic acceptability (binary)
-- **STS-B**: Semantic similarity (regression)
-- **WNLI**: Winograd NLI (binary)
+---
 
-### Climate/Time Series Datasets
-- **Electricity Transformer Temperature**: Temperature prediction
-- **Jena Climate**: Single-variable climate prediction
-- **Jena Climate Multi**: Multi-variable climate prediction
+## 🧠 Available Models (📦 `--model`)
 
-### Other Datasets
-- **Arxiv**: Paper classification by subject category
-- **PG19**: Long text modeling
-- **NER**: Named entity recognition
-- **Synthetic**: Various synthetic sequence tasks
+| Category          | Registry key                | Notes |
+|-------------------|-----------------------------|-------|
+| **Token Field Networks** | `tfn_classifier`, `tfn_regressor`, `tfn_timeseries_regressor`, `tfn_sequence_regressor`, `tfn_language_model` | Core architecture (field projection + evolution + sampling) |
+| **Enhanced TFN**  | `enhanced_tfn_classifier`, `enhanced_tfn_language_model` | Adds field interference, dynamic propagation, physics constraints |
+| **Image TFN (2-D)**| `tfn_vision` | 2-D fields, CNN/PDE evolvers; experimental |
+| **Baselines**     | `transformer_classifier`, `performer_classifier`, `lstm_classifier`, `cnn_classifier`, … (replace `classifier` with `regressor` / `language_model` for other tasks) | Reference implementations
 
-## 🤖 Available Models
-
-### Classification Models
-- **TFN (Unified)**: Standard Token Field Network
-- **Enhanced TFN**: Field-interference variant (`enhanced_tfn_classifier`)
-- **Transformer**: Standard Transformer encoder
-- **Performer**: Linear attention approximation
-- **LSTM**: LSTM-based classifier
-- **CNN**: CNN-based classifier
-
-### Regression Models
-- **TFN**: Token Field Network for regression
-- **Transformer**: Standard Transformer for regression
-- **Performer**: Linear attention for regression
-- **LSTM**: LSTM-based regressor
-- **CNN**: CNN-based regressor
-
-## 🎯 Training Commands
-
-### Text Classification Training
-
-#### Basic Text Classification
-```bash
-python -m tfn.scripts.train --task classification --dataset <dataset> --model tfn [options]
-```
-
-**Parameters:**
-- `--dataset`: Dataset name (`agnews`, `imdb`, `yelp_full`)
-- `--seq_len`: Sequence length (default: 128)
-- `--embed_dim`: Embedding dimension (default: 128)
-- `--num_layers`: Number of TFN layers (default: 2)
-- `--kernel_type`: Kernel type (`rbf`, `compact`, `fourier`) (default: `rbf`)
-- `--evolution_type`: Evolution type (`cnn`, `spectral`, `pde`) (default: `cnn`)
-- `--grid_size`: Grid size (default: 64)
-- `--time_steps`: Time steps (default: 3)
-- `--dropout`: Dropout rate (default: 0.1)
-- `--batch_size`: Batch size (default: 32)
-- `--epochs`: Number of epochs (default: 10)
-- `--lr`: Learning rate (default: 1e-3)
-- `--weight_decay`: Weight decay (default: 1e-4)
-- `--device`: Device (`cuda`, `cpu`, `auto`) (default: `auto`)
-- `--num_workers`: DataLoader workers (default: 2)
-- `--save_dir`: Save directory (default: `outputs`)
-- `--tag`: Optional run tag
-
-**Examples:**
-```bash
-# Train on AG News with default parameters
-python -m tfn.scripts.train --task classification --dataset agnews --model tfn --epochs 10
-
-# Train on IMDB with custom parameters
-python -m tfn.scripts.train --task classification --dataset imdb --model tfn \
-       --embed_dim 256 --num_layers 3 --batch_size 64 --epochs 20 --lr 3e-4
-
-# Train on Yelp with larger model
-python -m tfn.scripts.train --task classification --dataset yelp_full --model tfn \
-       --embed_dim 512 --num_layers 4 --seq_len 256 --epochs 15
-```
-
-### GLUE Benchmark Training
-
-All GLUE tasks use the same unified CLI; simply specify the dataset key and model.
+Default hyper-parameters are stored in the registry (`tfn/model/registry.py`). Override any of them via CLI:
 
 ```bash
-# General form
-python -m tfn.scripts.train --task classification --dataset <glue_task> --model <model> [options]
-
-# Examples
-python -m tfn.scripts.train --task classification --dataset sst2 --model tfn --epochs 10
-python -m tfn.scripts.train --task classification --dataset mrpc --model transformer --epochs 15
-python -m tfn.scripts.train --task classification --dataset qqp --model performer --embed_dim 256 --num_layers 3 --epochs 20
+--embed_dim 256 --num_layers 4 --kernel_type compact --evolution_type pde
 ```
 
-### Climate/Time Series Training
+---
 
-#### Climate Datasets with Model Selection
+## 🔧 Unified Training CLI
+
+All 1-D models share a **single** entry-point:
+
 ```bash
-python -m tfn.scripts.train_climate_tfn --dataset <dataset> --model <model> [options]
+python -m tfn.scripts.train \
+    --task <classification|regression|time_series|language_modeling|ner> \
+    --dataset <dataset_key> \
+    --model <model_key> \
+    [common args] [dataset-specific args] [model-specific args]
 ```
 
-**Parameters:**
-- `--dataset`: Climate dataset (`electricity`, `jena`, `jena_multi`)
-- `--model`: Model architecture (`tfn`, `transformer`, `performer`, `lstm`, `cnn`) (default: `tfn`)
-- `--seq_len`: Sequence length (default: 128)
-- `--step`: Step size for sliding window (default: 1)
-- `--embed_dim`: Embedding dimension (default: 128)
-- `--num_layers`: Number of layers (default: 2)
-- `--kernel_type`: Kernel type for TFN (`rbf`, `compact`, `fourier`) (default: `rbf`)
-- `--evolution_type`: Evolution type for TFN (`cnn`, `spectral`, `pde`) (default: `cnn`)
-- `--grid_size`: Grid size for TFN (default: 64)
-- `--time_steps`: Time steps for TFN (default: 3)
-- `--dropout`: Dropout rate (default: 0.1)
-- `--batch_size`: Batch size (default: 32)
-- `--epochs`: Number of epochs (default: 10)
-- `--lr`: Learning rate (default: 1e-3)
-- `--weight_decay`: Weight decay (default: 1e-4)
-- `--device`: Device (`cuda`, `cpu`, `auto`) (default: `auto`)
-- `--num_workers`: DataLoader workers (default: 2)
-- `--save_dir`: Save directory (default: `outputs`)
-- `--tag`: Optional run tag
+### Common args
+`--epochs` (10) • `--batch_size` (32) • `--lr` (1e-3) • `--device` (`cuda`/`cpu`) • `--num_workers` (2) • `--dry_run`
 
-**Examples:**
+### Examples
+
+1. **Text classification (GLUE – SST-2)**
 ```bash
-# Train TFN on Electricity Transformer Temperature
-python -m tfn.scripts.train_climate_tfn --dataset electricity --model tfn --epochs 10
-
-# Train Transformer on Jena Climate
-python -m tfn.scripts.train_climate_tfn --dataset jena --model transformer --epochs 15
-
-# Train LSTM on Jena Climate Multi-variable
-python -m tfn.scripts.train_climate_tfn --dataset jena_multi --model lstm --seq_len 256 --epochs 20
-
-# Train with custom sequence length and step size
-python -m tfn.scripts.train_climate_tfn --dataset electricity --model tfn --seq_len 64 --step 2 --epochs 10
+python -m tfn.scripts.train \
+  --task classification --dataset sst2 --model tfn_classifier \
+  --embed_dim 256 --num_layers 3 --epochs 10
 ```
 
-### Arxiv Training
-
-#### Arxiv Papers Classification
+2. **Time-series forecasting (Electricity)**
 ```bash
-python -m tfn.scripts.train_arxiv_tfn [options]
+python -m tfn.scripts.train \
+  --task time_series --dataset electricity --model tfn_timeseries_regressor \
+  --seq_len 168 --step 1 --epochs 5
 ```
 
-**Parameters:**
-- `--seq_len`: Sequence length (default: 512)
-- `--embed_dim`: Embedding dimension (default: 256)
-- `--num_layers`: Number of TFN layers (default: 3)
-- `--kernel_type`: Kernel type (`rbf`, `compact`, `fourier`) (default: `rbf`)
-- `--evolution_type`: Evolution type (`cnn`, `spectral`, `pde`) (default: `cnn`)
-- `--grid_size`: Grid size (default: 64)
-- `--time_steps`: Time steps (default: 3)
-- `--dropout`: Dropout rate (default: 0.1)
-- `--batch_size`: Batch size (default: 32)
-- `--epochs`: Number of epochs (default: 10)
-- `--lr`: Learning rate (default: 1e-3)
-- `--weight_decay`: Weight decay (default: 1e-4)
-- `--device`: Device (`cuda`, `cpu`, `auto`) (default: `auto`)
-- `--num_workers`: DataLoader workers (default: 2)
-- `--save_dir`: Save directory (default: `outputs`)
-- `--tag`: Optional run tag
-
-**Examples:**
+3. **Language modelling (PG-19) with Enhanced TFN**
 ```bash
-# Train on Arxiv with default parameters
-python -m tfn.scripts.train_arxiv_tfn --epochs 10
-
-# Train with custom parameters
-python -m tfn.scripts.train_arxiv_tfn --embed_dim 512 --num_layers 4 --batch_size 64 --epochs 20 --lr 3e-4
+python -m tfn.scripts.train \
+  --task language_modeling --dataset pg19 --model enhanced_tfn_language_model \
+  --interference_type standard --propagator_type wave --epochs 3
 ```
 
-### Other Training Scripts
-
-#### Long Text Training
+4. **Baseline Transformer on IMDB**
 ```bash
-python -m tfn.scripts.train_long [options]
-
+python -m tfn.scripts.train \
+  --task classification --dataset imdb --model transformer_classifier --epochs 5
 ```
 
-#### NER Training
-```bash
-python -m tfn.scripts.train_ner_tfn [options]
-```
+> Check the registry or run with `--dry_run` to print all required/optional parameters before training.
 
-#### PG19 Training
-```bash
-python -m tfn.scripts.train_pg19 [options]
-```
+---
 
-#### Synthetic Sequence Training
-```bash
-python -m tfn.scripts.train_synthetic_seq [options]
-```
-
-#### CIFAR Training
-```bash
-python -m tfn.scripts.train_cifar_tfn [options]
-python -m tfn.scripts.train_cifar_vit [options]
-```
-
-## 🏁 Benchmarking
-
-Run multiple dataset / model configurations programmatically with the new benchmark driver:
+## ⚡ Benchmark Runner
 
 ```bash
 # Quick 2-dataset sanity sweep
 python -m tfn.scripts.benchmark --preset quick
-
-# Full NLP benchmark (all GLUE + common text datasets)
-python -m tfn.scripts.benchmark --preset nlp_full
-
-# Time-series benchmark
-python -m tfn.scripts.benchmark --preset time_series
 ```
 
-Results are written to `outputs/benchmark_<preset>.json`.
+Presets live inside `scripts/benchmark.py` (`quick`, `nlp_small`, `nlp_full`, `time_series`). Results are written to `outputs/benchmark_<preset>.json`.
 
-## 🔄 Model Comparison Examples
+---
 
-### Compare All Models on SST-2
+## 🔬 Research Features
+
+* **Field Interference** – multi-token constructive/destructive interaction.
+* **Dynamic Propagation** – learnable PDE/CNN operators chosen per layer.
+* **Physics Constraints** – optional loss enforcing e.g. Burgers/Heat/Wave equations.
+* **2-D ImageTFN** – extend fields over (H × W) grid; see `tests/test_tfn_pytorch.py` for usage.
+
+Enable via the Enhanced model registry keys and pass:
 ```bash
-for model in tfn transformer performer lstm cnn; do
-  python -m tfn.scripts.train_glue_tfn --task sst2 --model $model --epochs 10
-done
+--interference_type standard  # or 'multihead', 'gated', …
+--propagator_type diffusion   # or 'wave', 'schrodinger'
+--use_physics_constraints     # flag, adds auxiliary PDE loss
 ```
 
-### Compare TFN vs Transformer on All GLUE Tasks
-```bash
-for task in sst2 mrpc qqp qnli rte cola stsb wnli; do
-  python -m tfn.scripts.train_glue_tfn --task $task --model tfn --epochs 10
-  python -m tfn.scripts.train_glue_tfn --task $task --model transformer --epochs 10
-done
-```
+---
 
-### Compare Models on Climate Data
-```bash
-for model in tfn transformer lstm cnn; do
-  python -m tfn.scripts.train_climate_tfn --dataset electricity --model $model --epochs 10
-done
-```
+## 🗂 Output Structure
 
-## 📁 Output Organization
-
-Results are automatically organized by model and dataset:
 ```
 outputs/
-├── sst2_tfn_ed128_L2/
-│   ├── best_model.pt
-│   └── history.json
-├── sst2_transformer_ed128_L2/
-│   ├── best_model.pt
-│   └── history.json
-├── electricity_tfn_ed128_L2/
-│   ├── best_model.pt
-│   └── history.json
-└── ...
+├── agnews_tfn_classifier/           # dataset_model
+│   ├── best_model.pt               # final checkpoint
+│   ├── history.json                # train/val loss curves
+│   └── cfg.json                    # full CLI args dump (auto-saved)
+└── benchmark_quick.json
 ```
 
-## 🗂️ Dataset Sources
+---
 
-### Kaggle Datasets
-- **AG News**: Available via HuggingFace datasets
-- **IMDB**: `/kaggle/input/imdb-dataset-of-50k-movie-reviews/`
-- **Yelp**: `/kaggle/input/yelp-dataset-yelp-review-full/`
-- **GLUE Tasks**: Available via HuggingFace datasets
-- **Electricity**: `/kaggle/input/electricity-transformer-temperature/`
-- **Jena Climate**: `/kaggle/input/jena-climate-archive/`
-- **Arxiv**: `/kaggle/input/arxiv-papers-2021/`
+## 🛠 Developer Notes
 
-### HuggingFace Datasets
-- **GLUE**: `datasets.load_dataset("glue", task_name)`
-- **Electricity**: `datasets.load_dataset("mstz/electricity_transformer_temperature")`
-- **Jena Climate**: `datasets.load_dataset("mstz/jena_climate")`
-- **Arxiv**: `datasets.load_dataset("arxiv_dataset")`
+1. **Numerical stability** – all evolvers support FP32/AMP; kernels normalised to avoid blow-up.
+2. **Modularity** – every component has a public `forward` with clear typing + docstring.
+3. **Testing** – run `pytest -q` or `python -m tfn.run_comprehensive_tests` (takes ~3 min CPU).
+4. **Extending TFN** – add a new kernel/evolution in `core/`, register it, add a unit-test, and update this README.
 
-## ⚙️ Model-Specific Parameters
-
-### TFN Parameters
-- `--kernel_type`: Kernel type (`rbf`, `compact`, `fourier`)
-- `--evolution_type`: Evolution type (`cnn`, `spectral`, `pde`)
-- `--grid_size`: Grid size for field evolution
-- `--time_steps`: Number of time steps for evolution
-
-### Transformer Parameters
-- `--num_heads`: Number of attention heads (default: 4)
-- `--embed_dim`: Embedding dimension
-- `--num_layers`: Number of transformer layers
-
-### Performer Parameters
-- `--proj_dim`: Projection dimension for linear attention (default: 64)
-- `--embed_dim`: Embedding dimension
-- `--num_layers`: Number of performer layers
-
-### LSTM Parameters
-- `--hidden_dim`: Hidden dimension (default: 128)
-- `--bidirectional`: Use bidirectional LSTM (default: True)
-- `--num_layers`: Number of LSTM layers
-
-### CNN Parameters
-- `--num_filters`: Number of filters (default: 128)
-- `--filter_sizes`: Filter sizes (default: [3, 4, 5])
-
-## 🎯 Evaluation Metrics
-
-### Classification Tasks
-- **Accuracy**: Percentage of correct predictions
-- **Loss**: Cross-entropy loss
-
-### Regression Tasks
-- **MSE**: Mean squared error
-- **RMSE**: Root mean squared error
-- **Loss**: MSE loss
-
-## 🔧 Advanced Usage
-
-### Custom Hyperparameter Search
-```bash
-# Grid search over learning rates
-for lr in 1e-4 3e-4 1e-3 3e-3; do
-  python -m tfn.scripts.train_glue_tfn --task sst2 --model tfn --lr $lr --tag lr$lr
-done
-```
-
-### Model Size Comparison
-```bash
-# Compare different model sizes
-for embed_dim in 64 128 256 512; do
-  python -m tfn.scripts.train_glue_tfn --task sst2 --model tfn --embed_dim $embed_dim --tag ed$embed_dim
-done
-```
-
-### Multi-GPU Training
-```bash
-# Use specific GPU
-python -m tfn.scripts.train_glue_tfn --task sst2 --model tfn --device cuda:0
-```
-
-## 📊 Monitoring and Logging
-
-All training runs save:
-- **Best model checkpoint**: `best_model.pt`
-- **Training history**: `history.json` with loss and metrics
-- **Console output**: Real-time training progress
-
-## 🚨 Troubleshooting
-
-### Common Issues
-1. **CUDA out of memory**: Reduce `--batch_size` or `--seq_len`
-2. **Dataset not found**: Ensure Kaggle datasets are in correct paths or use HuggingFace
-3. **Import errors**: Install required dependencies with `pip install torch datasets pandas numpy`
-
-### Performance Tips
-- Use `--device cuda` for GPU training
-- Adjust `--num_workers` based on your system
-- Use `--batch_size` that fits in your GPU memory
-- For long sequences, consider reducing `--seq_len`
-
-## 📚 Additional Resources
-
-- **TFN Architecture**: See `tfn/core/` for implementation details
-- **Dataset Loaders**: See `tfn/tfn_datasets/` for dataset implementations
-- **Model Definitions**: See `tfn/model/` for model architectures
-- **Training Scripts**: See `tfn/scripts/` for all training scripts
+---
 
 ## 🤝 Contributing
 
-To add new datasets or models:
-1. Add dataset loader in `tfn/tfn_datasets/`
-2. Add model definition in `tfn/model/`
-3. Update training script with new options
-4. Update this README with new commands 
-
-## ⚠️ Mixed-Precision Limitation
-Currently, the ImageTFN model does not fully support mixed-precision (AMP) training due to dtype issues. If you attempt to use torch.cuda.amp or similar features, you may encounter runtime errors. This is a known limitation and will be addressed in a future release.
-
-**Tip:** Always run scripts as modules using `python -m tfn.scripts.train ...` to ensure robust imports and package resolution, especially on platforms like Kaggle or Colab. 
+Pull requests welcome! Please:
+1. Run full test-suite.
+2. Include docstrings + typing.
+3. Update the registry + this README if you add a new model or dataset. 

@@ -22,7 +22,9 @@ def test_dynamic_propagator_forward_shapes(evolution_type: str) -> None:
         dt=0.01,
     )
 
-    out = propagator(token_fields)  # forward
+    # Create dummy grid_points [B, N, P] (P=1 for 1D)
+    grid_points = torch.linspace(0, 1, tokens).reshape(1, tokens, 1).expand(batch, tokens, 1)
+    out = propagator(token_fields, grid_points)  # forward
     assert out.shape == (batch, tokens, embed_dim)
 
     # Ensure differentiability
@@ -35,5 +37,6 @@ def test_dynamic_propagator_unknown_evolution_type() -> None:
     batch, tokens, embed_dim = 1, 4, 8
     x = torch.randn(batch, tokens, embed_dim)
     propagator = DynamicFieldPropagator(embed_dim=embed_dim, pos_dim=1, evolution_type="unknown")
+    grid_points = torch.linspace(0, 1, tokens).reshape(1, tokens, 1)
     with pytest.raises(ValueError):
-        _ = propagator(x) 
+        _ = propagator(x, grid_points) 

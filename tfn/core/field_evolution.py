@@ -272,7 +272,38 @@ class DynamicFieldPropagator(nn.Module):
     Dynamic field propagation with coupled PDEs and interference.
     Implements hybrid discrete-continuous evolution that bridges token representations with continuous field dynamics.
     """
-    # ... (copy full class from dynamic_propagation.py)
+    def __init__(self,
+                 embed_dim: int,
+                 pos_dim: int,
+                 evolution_type: str = "diffusion",
+                 interference_type: str = "standard",
+                 num_steps: int = 4,
+                 dt: float = 0.01,
+                 interference_weight: float = 0.5,
+                 dropout: float = 0.1):
+        super().__init__()
+        self.embed_dim = embed_dim
+        self.pos_dim = pos_dim
+        self.evolution_type = evolution_type
+        self.interference_type = interference_type
+        self.num_steps = num_steps
+        self.dt = dt
+        self.interference_weight = interference_weight
+        self.dropout = dropout
+        self.evolver = FieldEvolver(embed_dim, pos_dim, evolution_type)
+        self.interference = TokenFieldInterference(
+            embed_dim,
+            num_heads=8,
+            interference_types=(interference_type,),
+            dropout=dropout
+        )
+
+    def forward(self, field: torch.Tensor, grid_points: torch.Tensor, **kwargs) -> torch.Tensor:
+        # Evolve and interfere for num_steps
+        for _ in range(self.num_steps):
+            field = self.evolver(field, grid_points, time_steps=1, **kwargs)
+            field = self.interference(field, grid_points)
+        return field
 
 
 class AdaptiveFieldPropagator(DynamicFieldPropagator):

@@ -6,7 +6,7 @@ from tfn.model import registry as reg
 def test_get_model_config_known() -> None:
     cfg = reg.get_model_config("tfn_classifier")
     assert isinstance(cfg, dict)
-    assert cfg["class"].__name__ == "TFNClassifier"
+    assert cfg["class"].__name__ == "TFN"
 
 
 def test_get_model_config_unknown() -> None:
